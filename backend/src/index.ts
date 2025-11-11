@@ -1,12 +1,16 @@
 import express from 'express';
+import { server } from "./config"
+import { testConnection } from './config/database';
 
 const app = express();
-const port = 3000;
+const port = server.port;
 
-app.get('/', (req, res) => {
-    res.send('Hello World');
-})
+async function startServer() {
+    await testConnection();
+    app.listen(port, () => console.log(`Server started, listening on port ${port}`))
+}
 
-app.listen(port, () => {
-    console.log(`Listening on port ${port}`);
+startServer().catch(error => {
+    console.error('Failed to start: ', error);
+    process.exit(1);
 })
