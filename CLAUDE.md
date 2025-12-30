@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Self-service Minecraft server hosting platform where users can create, manage, and connect to their own Minecraft servers through a web dashboard. Built with Kubernetes, Terraform, and modern web technologies to demonstrate DevOps and cloud engineering skills.
+Self-service Minecraft server hosting platform where users can create, manage, and connect to their own Minecraft servers through a CLI tool. Built with Kubernetes, Terraform, and Go to demonstrate DevOps and platform engineering skills.
 
 ## Architecture Summary
 
@@ -11,18 +11,20 @@ Self-service Minecraft server hosting platform where users can create, manage, a
 - All components run as pods on this single node
 - Terraform provisions AWS infrastructure
 - K3s manages container orchestration
+- **Networking:** `NodePort` services exposing ports 30000-30015 directly on the host IP
+- **Storage:** `local-path` StorageClass writing directly to the EC2 NVMe disk (HostPath)
 
 **Core Components:**
-1. **Frontend Namespace**: React dashboard for user interaction
-2. **Backend Namespace**: Node.js API + PostgreSQL database
-3. **Minecraft Namespaces**: Dynamically created, one per server (isolated with ResourceQuotas)
-4. **System Namespace**: Monitoring and automation services (optional)
+1. **CLI Tool**: Go-based command-line interface with direct Kubernetes API access and **pre-flight capacity checks**
+2. **User Namespaces**: One namespace per user with RBAC-enforced isolation
+3. **Minecraft Pods**: StatefulSets within user namespaces (up to 3 per user)
+4. **System Namespace**: Monitoring and automation services
 
 **Tech Stack:**
 - Infrastructure: AWS (EC2, VPC), Terraform, K3s
-- Backend: Node.js, Express, TypeScript, PostgreSQL
-- Frontend: React, TypeScript, Vite
+- CLI Tool: Go, client-go (Kubernetes client library)
 - Container Orchestration: K3s (lightweight Kubernetes)
+- Authentication: Kubernetes RBAC + client certificates
 - CI/CD: GitHub Actions
 - Container Registry: Docker Hub
 
@@ -30,106 +32,352 @@ Self-service Minecraft server hosting platform where users can create, manage, a
 
 **Users:** 5 people
 **Servers per user:** Up to 3
-**Concurrent servers:** 2-3 running simultaneously
+**Concurrent servers:** 2-3 running simultaneously (strict memory limits applied)
 **Total servers:** Up to 15 (most stopped to save resources)
-**Monthly cost:** ~$60 (single t3.large EC2 instance)
+**Monthly cost:** ~$73 (single t3.large EC2 instance with 100GB storage)
 
 ---
 
-## Phase 0: Prerequisites & Setup
+## Phase 0: Prerequisites & Setup (Local First)
 
 ### Goals
 - Set up development environment
+- **Shift Left:** Develop and test entirely on local clusters before deploying to AWS
 - Learn foundational concepts
-- Create accounts and tooling
 
 ### What to Learn
-- **Git basics**: commit, push, pull, branches
-- **Docker fundamentals**: 
-  - Containers vs VMs
-  - Dockerfile syntax
-  - docker build, run, compose
-- **Kubernetes concepts (high-level)**:
-  - Pods, Deployments, Services, Namespaces
-  - Basic architecture understanding
-- **AWS basics**:
-  - EC2, VPC, Security Groups
-  - Free Tier limits
+
+**Git basics:**
+- commit, push, pull, branches
+- .gitignore patterns
+- Meaningful commit messages
+
+**Docker fundamentals:**
+- Containers vs VMs
+- Dockerfile syntax
+- docker build, run, compose
+- Image layers and caching
+- Multi-stage builds
+
+**Kubernetes concepts (in-depth):**
+- Pods, StatefulSets, Services, Namespaces
+- **NodePort Networking** vs LoadBalancers
+- RBAC (Roles, RoleBindings)
+- PersistentVolumeClaims (local-path)
+- ResourceQuotas & Limits
+- Labels and selectors
+
+**AWS basics:**
+- EC2 instances and instance types
+- VPC, subnets, and networking
+- **Security Groups (Ingress ranges)**
+- Elastic IPs
+- Free Tier limits and pricing
+
+**Go basics:**
+- Syntax and idioms
+- Package management (go mod)
+- Building binaries
+- Working with structs and interfaces
+- Error handling patterns
+- Goroutines and channels (basic)
 
 ### Deliverables
-- Development environment configured (Docker, kubectl, Terraform, Node.js installed)
-- AWS, GitHub, Docker Hub accounts created
-- Project repository initialized with proper directory structure
-- Basic understanding of Docker and K8s concepts
+- [ ] Development environment configured (Docker, kubectl, Terraform, Go installed)
+- [ ] AWS, GitHub, Docker Hub accounts created
+- [ ] Project repository initialized with proper directory structure
+- [ ] **Local K3s cluster running (k3d or minikube)** for Phase 1-3 development
+- [ ] Basic understanding of Docker and K8s concepts validated
 
 ---
 
-## Phase 1: Local Development - Backend API
+## Phase 1: Kubernetes Manifests & RBAC Setup
 
 ### Goals
-- Build the API server that manages Minecraft servers
-- Test locally without cloud infrastructure
-- Learn backend development and Kubernetes client libraries
+- Create K8s YAML manifests for infrastructure
+- Implement RBAC for multi-user isolation
+- Test user namespace isolation locally
+- **Switch networking model to NodePort**
 
-### Core Features to Implement
+### Manifests to Create
 
-**Authentication System:**
-- User registration endpoint
-- User login endpoint
-- JWT token generation and verification
-- Password hashing
+**User Namespace Template (per user):**
+```yaml
+# namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mc-{username}
+  labels:
+    app: kubecraft
+    user: {username}
 
-**Database Schema:**
-- Users table (id, username, email, password_hash, created_at)
-- Minecraft_servers table (id, user_id, server_name, namespace, version, game_mode, status, connection details)
+---
+# resourcequota.yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-resources
+  namespace: mc-{username}
+spec:
+  hard:
+    requests.cpu: "1500m"      # Reduced: allows 2 servers avg per user (2 × 500m)
+    requests.memory: 1536Mi    # Reduced: allows 2 servers avg per user (2 × 768Mi)
+    limits.cpu: "2250m"        # Reduced: allows up to 3 servers max (3 × 750m)
+    limits.memory: 3Gi         # Reduced: allows up to 3 servers max (3 × 1Gi)
+    persistentvolumeclaims: "3"
 
-**Kubernetes Management:**
-- Function to create Minecraft server (namespace, StatefulSet, PVC, Service, ResourceQuota)
-- Function to start server (scale to 1 replica)
-- Function to stop server (scale to 0 replicas)
-- Function to delete server (cleanup all resources)
-- Function to get server status (query pod state)
+# CAPACITY PLANNING NOTE:
+# t3.large total: 8GB RAM, 2 vCPU
+# System overhead (K3s, OS, monitoring): ~2GB RAM, ~500m CPU
+# Available for workloads: ~6GB RAM, ~1.5 vCPU
+#
+# Per-server resources:
+#   requests: 768Mi RAM, 500m CPU
+#   limits: 1Gi RAM, 750m CPU
+#
+# Capacity calculation:
+#   Average case (2 servers running): 2 × 768Mi = 1.5GB RAM
+#   Max case (3 servers running): 3 × 1Gi = 3GB RAM
+#   Total cluster capacity: 5 users × 3GB = 15GB potential, but only ~4-5 servers run concurrently
+#
+# Safety: Pre-flight check prevents server creation if available RAM < 1.5GB
 
-**API Endpoints:**
-- POST /api/auth/register
-- POST /api/auth/login
-- POST /api/servers (create new server)
-- GET /api/servers (list user's servers)
-- GET /api/servers/:id (get server details)
-- POST /api/servers/:id/start
-- POST /api/servers/:id/stop
-- DELETE /api/servers/:id
+---
+# role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: minecraft-manager
+  namespace: mc-{username}
+rules:
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims", "services"]
+  verbs: ["get", "list", "create", "update", "delete"]
+- apiGroups: ["apps"]
+  resources: ["statefulsets"]
+  verbs: ["get", "list", "create", "update", "delete", "patch"]
+- apiGroups: [""]
+  resources: ["pods", "pods/log"]
+  verbs: ["get", "list"]
+# Note: metrics.k8s.io removed - capacity checks use pod.Spec.Resources instead
+
+---
+# rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {username}-binding
+  namespace: mc-{username}
+subjects:
+- kind: ServiceAccount
+  name: {username}
+  namespace: mc-{username}
+roleRef:
+  kind: Role
+  name: minecraft-manager
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {username}
+  namespace: mc-{username}
+
+---
+# clusterrole.yaml (Applied once by admin, shared by all users)
+# This grants read-only access to namespaces and services for capacity/port checks
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubecraft-capacity-checker
+rules:
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["services", "pods"]
+  verbs: ["get", "list"]
+  # Users can only list across mc-* namespaces (enforced by label selector in code)
+
+---
+# clusterrolebinding.yaml (Applied once by admin)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubecraft-users-capacity-check
+subjects:
+# Add each user's ServiceAccount here during onboarding
+- kind: ServiceAccount
+  name: {username}
+  namespace: mc-{username}
+roleRef:
+  kind: ClusterRole
+  name: kubecraft-capacity-checker
+  apiGroup: rbac.authorization.k8s.io
+```
+
+**Minecraft Server Template (within user namespace):**
+```yaml
+# statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {servername}
+  namespace: mc-{username}
+  labels:
+    app: minecraft
+    server: {servername}
+    owner: {username}
+spec:
+  serviceName: {servername}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minecraft
+      server: {servername}
+  template:
+    metadata:
+      labels:
+        app: minecraft
+        server: {servername}
+    spec:
+      containers:
+      - name: minecraft
+        image: your-dockerhub/minecraft:latest
+        env:
+        - name: VERSION
+          value: "1.20.1"
+        - name: GAME_MODE
+          value: "survival"
+        - name: MAX_PLAYERS
+          value: "20"
+        ports:
+        - containerPort: 25565
+          protocol: TCP
+        resources:
+          # STRICT LIMITS ENFORCED to prevent Node OOM
+          requests:
+            memory: "768Mi"  # Reduced: realistic for Minecraft (768MB)
+            cpu: "500m"
+          limits:
+            memory: "1Gi"    # Reduced: prevents memory overcommitment
+            cpu: "750m"      # Reduced: allows more concurrent servers
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        readinessProbe:
+          tcpSocket:
+            port: 25565
+          initialDelaySeconds: 30
+          periodSeconds: 10
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "local-path" # Writes to host disk
+      resources:
+        requests:
+          storage: 5Gi
+
+---
+# service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {servername}
+  namespace: mc-{username}
+spec:
+  type: NodePort # CHANGED: No LoadBalancer costs
+  selector:
+    app: minecraft
+    server: {servername}
+  ports:
+  - port: 25565
+    targetPort: 25565
+    # nodePort will be assigned automatically (30000-32767) 
+    # or manually assigned by CLI logic
+    protocol: TCP
+```
+
+**System Namespace (Optional):**
+```yaml
+# idle-monitor-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: idle-monitor
+  namespace: system
+spec:
+  schedule: "*/30 * * * *"  # Every 30 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: idle-monitor
+          containers:
+          - name: monitor
+            image: your-dockerhub/idle-monitor:latest
+            env:
+            - name: IDLE_THRESHOLD_MINUTES
+              value: "60"
+          restartPolicy: OnFailure
+```
 
 ### What to Learn
 
-**Node.js + Express + TypeScript:**
-- RESTful API design
-- Middleware patterns (authentication, error handling)
-- Environment variables management
-- TypeScript types and interfaces
+**Kubernetes RBAC:**
+- Role vs ClusterRole (namespace-scoped vs cluster-scoped)
+- RoleBinding vs ClusterRoleBinding
+- Service accounts vs user accounts
+- Principle of least privilege
+- Testing RBAC policies with `kubectl auth can-i`
+- RBAC API groups and resources
+- Verb permissions (get, list, create, update, delete, patch, watch)
 
-**PostgreSQL:**
-- SQL basics (CREATE, INSERT, SELECT, UPDATE, DELETE)
-- Primary keys, foreign keys, relationships
-- Connection pooling
+**Kubernetes Authentication:**
+- Client certificates (x509)
+- Kubeconfig file structure
+- Certificate signing requests (CSR)
+- ServiceAccount tokens (JWT)
 
-**JWT Authentication:**
-- Token-based authentication flow
-- Token generation and verification
-- Protected route middleware
+**Kubernetes YAML Syntax:**
+- apiVersion, kind, metadata, spec structure
+- Labels and selectors
+- Resource organization and naming conventions
+- Template variables and substitution
 
-**Kubernetes Client Library:**
-- @kubernetes/client-node usage
-- Programmatically creating K8s resources
-- Reading pod status and events
-- Handling async K8s operations
+**Core K8s Concepts:**
+- **StatefulSet**: Stable network identity, ordered pod management, persistent storage
+- **Service**:
+  - NodePort: Mapping internal ports to host ports
+  - Why not LoadBalancer: Cost implications and architectural fit
+- **PersistentVolumeClaim**:
+  - local-path storage class (HostPath)
+  - Dynamic provisioning on single nodes
+- **ResourceQuota**: Enforcing limits per namespace to prevent OOM
+- **Namespace**: Multi-tenancy isolation
+
+**kubectl Commands:**
+- `kubectl apply -f <file>`
+- `kubectl get <resource> -n <namespace>`
+- `kubectl describe <resource> <name> -n <namespace>`
+- `kubectl logs <pod> -n <namespace>`
+- `kubectl exec -it <pod> -n <namespace> -- /bin/bash`
+- `kubectl delete <resource> <name> -n <namespace>`
+- `kubectl auth can-i <verb> <resource> --as=<user> -n <namespace>`
+- `kubectl config view`
 
 ### Deliverables
-- Working API server with all endpoints functional
-- PostgreSQL database with complete schema
-- Successfully tested against local K3s cluster (k3d/minikube)
-- API documentation (Postman collection or README)
-- Can create/manage Minecraft servers programmatically
+- [ ] Complete K8s manifests for user namespaces with RBAC
+- [ ] Minecraft server template manifests using NodePort
+- [ ] Script to generate user-specific manifests from templates
+- [ ] Successfully deployed and tested in local K3s cluster (k3d)
+- [ ] Can create isolated namespaces with working RBAC
+- [ ] RBAC policies tested with `kubectl auth can-i`
 
 ---
 
@@ -140,260 +388,456 @@ Self-service Minecraft server hosting platform where users can create, manage, a
 - Configure for Kubernetes deployment
 - Test locally
 
-### What Image Needs
-- Base: OpenJDK 17
-- Minecraft server.jar
-- Configurable via environment variables (game mode, max players, memory limits)
-- RCON enabled for server management
-- Persistent volume mount for world data
-- Startup script with proper memory settings
+### Dockerfile Structure
+
+Standard structure as previously defined, ensuring Volume mount points align with PVC.
 
 ### What to Learn
 
 **Dockerfile Best Practices:**
 - Multi-stage builds
-- Layer caching optimization
-- COPY vs ADD
-- EXPOSE, VOLUME, CMD directives
+- Layer caching
 
 **Minecraft Server Configuration:**
-- server.properties file options
-- RCON (Remote Console) setup
-- Game modes, difficulty settings
-- Memory allocation for Java
+- server.properties
+- EULA
+- Paper vs Vanilla
 
-**Environment Variables:**
-- Parameterizing Docker containers
-- Default values with ${VAR:-default} syntax
-- Configuration management patterns
+**Java Memory Management:**
+- G1GC
+- -Xms/-Xmx
+- Container limits vs JVM heap
+
+**Docker Build & Push:**
+- Tagging and Registry management
 
 ### Deliverables
-- Working Minecraft server Docker image
-- Image pushed to Docker Hub
-- Tested locally (can connect with Minecraft client)
-- Documented configuration options
+- [ ] Working Dockerfile for Minecraft server
+- [ ] Startup script with environment variable configuration
+- [ ] Image built and tested locally
+- [ ] Image pushed to Docker Hub
+- [ ] Health check implemented and tested
 
 ---
 
-## Phase 3: Kubernetes Manifests
+## Phase 3: CLI Tool with Kubernetes Client
 
 ### Goals
-- Create K8s YAML manifests for all components
-- Test full stack in local K3s cluster
-- Understand K8s resource definitions
+- Build Go-based CLI tool with direct Kubernetes API access
+- Implement kubeconfig management
+- Implement Pre-flight Capacity Checks (Safety Mechanism)
+- Implement Polling Logic for NodePort retrieval
 
-### Manifests to Create
+### Project Structure
 
-**Namespaces:**
-- frontend
-- backend
-- (minecraft namespaces created dynamically by API)
+Same as original.
 
-**Backend Resources:**
-- PostgreSQL StatefulSet with PVC
-- PostgreSQL Service (ClusterIP)
-- API Server Deployment
-- API Server Service (ClusterIP)
-- Secrets (database password, JWT secret)
+### Key Code Examples
 
-**Frontend Resources:**
-- Frontend Deployment
-- Frontend Service (LoadBalancer)
+**Server Creation (pkg/k8s/server.go) - UPDATED:**
+```go
+package k8s
 
-**Minecraft Server Template:**
-- Namespace definition
-- ResourceQuota (CPU/memory limits)
-- StatefulSet for MC server
-- PVC for world data
-- Service (LoadBalancer with specific port)
-- ConfigMap for server configuration
+import (
+    "context"
+    "fmt"
+    "time"
+    appsv1 "k8s.io/api/apps/v1"
+    corev1 "k8s.io/api/core/v1"
+    "k8s.io/apimachinery/pkg/api/resource"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    "k8s.io/apimachinery/pkg/util/intstr"
+)
 
-**Supporting Services (Optional):**
-- Idle Monitor CronJob
-- Backup Service CronJob
-- Prometheus/Grafana for monitoring
+// CheckNodeCapacity ensures the node has sufficient RAM before scheduling a new server
+// This prevents OOM (Out of Memory) situations that would crash the entire node
+func (c *Client) CheckNodeCapacity(ctx context.Context) error {
+    const (
+        totalNodeRAM     = 8 * 1024 * 1024 * 1024  // 8GB in bytes (t3.large)
+        systemOverhead   = 2 * 1024 * 1024 * 1024  // 2GB reserved for K3s, OS, etc.
+        safetyMargin     = 1536 * 1024 * 1024      // 1.5GB safety buffer
+        newServerRequest = 768 * 1024 * 1024       // 768Mi per new server (from requests.memory)
+    )
+
+    availableRAM := totalNodeRAM - systemOverhead
+
+    // Strategy: Sum all current Pod memory requests across the cluster
+    // This is more reliable than metrics-server (which may not be installed)
+    // and reflects Kubernetes' scheduling decisions
+
+    // 1. Get all namespaces with kubecraft label
+    namespaces, err := c.clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
+        LabelSelector: "app=kubecraft",
+    })
+    if err != nil {
+        return fmt.Errorf("failed to list namespaces: %w", err)
+    }
+
+    // 2. Sum memory requests from all running pods
+    var totalMemoryRequests int64 = 0
+
+    for _, ns := range namespaces.Items {
+        pods, err := c.clientset.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
+            LabelSelector: "app=minecraft",
+            FieldSelector: "status.phase=Running", // Only count running pods
+        })
+        if err != nil {
+            return fmt.Errorf("failed to list pods in namespace %s: %w", ns.Name, err)
+        }
+
+        for _, pod := range pods.Items {
+            for _, container := range pod.Spec.Containers {
+                // Extract memory request
+                if memRequest, ok := container.Resources.Requests[corev1.ResourceMemory]; ok {
+                    totalMemoryRequests += memRequest.Value()
+                }
+            }
+        }
+    }
+
+    // 3. Calculate free RAM
+    freeRAM := availableRAM - totalMemoryRequests
+
+    // 4. Check if we have enough space for the new server + safety margin
+    requiredRAM := newServerRequest + safetyMargin
+
+    if freeRAM < requiredRAM {
+        // Build helpful error message
+        return fmt.Errorf(
+            "insufficient cluster capacity\n"+
+                "  Available RAM: %.2f GB\n"+
+                "  Currently Used: %.2f GB\n"+
+                "  Free RAM: %.2f GB\n"+
+                "  Required (new server + safety margin): %.2f GB\n\n"+
+                "Try:\n"+
+                "  • Stop an idle server: kubecraft server stop <name>\n"+
+                "  • Delete unused servers: kubecraft server delete <name>\n"+
+                "  • List your servers: kubecraft server list",
+            bytesToGB(availableRAM),
+            bytesToGB(totalMemoryRequests),
+            bytesToGB(freeRAM),
+            bytesToGB(requiredRAM),
+        )
+    }
+
+    return nil // Capacity check passed
+}
+
+// bytesToGB converts bytes to gigabytes for human-readable output
+func bytesToGB(bytes int64) float64 {
+    return float64(bytes) / (1024 * 1024 * 1024)
+}
+
+func (c *Client) CreateServer(ctx context.Context, config ServerConfig) error {
+    
+    // 1. Run Pre-flight Check
+    if err := c.CheckNodeCapacity(ctx); err != nil {
+        return fmt.Errorf("capacity check failed: %w", err)
+    }
+
+    // 2. Create PVC (standard)
+    // ... (PVC creation code, ensure storageClassName is "local-path") ...
+    
+    // 3. Create StatefulSet (standard)
+    // ... (StatefulSet creation code) ...
+    
+    // 4. Allocate NodePort (CRITICAL: prevents port collisions)
+    nodePort, err := c.allocateNodePort(ctx)
+    if err != nil {
+        return fmt.Errorf("failed to allocate NodePort: %w", err)
+    }
+
+    // 5. Create Service (NodePort)
+    service := &corev1.Service{
+        ObjectMeta: metav1.ObjectMeta{
+            Name:      config.Name,
+            Namespace: c.namespace,
+            Labels: map[string]string{
+                "app":    "minecraft",
+                "server": config.Name,
+            },
+        },
+        Spec: corev1.ServiceSpec{
+            Type: corev1.ServiceTypeNodePort, // CHANGED from LoadBalancer
+            Selector: map[string]string{
+                "app":    "minecraft",
+                "server": config.Name,
+            },
+            Ports: []corev1.ServicePort{
+                {
+                    Port:       25565,
+                    TargetPort: intstr.FromInt(25565),
+                    Protocol:   corev1.ProtocolTCP,
+                    NodePort:   nodePort, // EXPLICIT assignment in our range
+                },
+            },
+        },
+    }
+
+    _, err = c.clientset.CoreV1().Services(c.namespace).Create(ctx, service, metav1.CreateOptions{})
+    return err
+}
+
+// allocateNodePort finds the first available port in the reserved range (30000-30015)
+func (c *Client) allocateNodePort(ctx context.Context) (int32, error) {
+    const (
+        minPort = 30000
+        maxPort = 30015 // Supports up to 16 servers (more than our 15-server limit)
+    )
+
+    // 1. List all Services across all mc-* namespaces to find used ports
+    usedPorts := make(map[int32]bool)
+
+    // Get all namespaces with label app=kubecraft
+    namespaces, err := c.clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
+        LabelSelector: "app=kubecraft",
+    })
+    if err != nil {
+        return 0, fmt.Errorf("failed to list namespaces: %w", err)
+    }
+
+    // Collect all NodePorts in use across all user namespaces
+    for _, ns := range namespaces.Items {
+        services, err := c.clientset.CoreV1().Services(ns.Name).List(ctx, metav1.ListOptions{
+            LabelSelector: "app=minecraft",
+        })
+        if err != nil {
+            return 0, fmt.Errorf("failed to list services in namespace %s: %w", ns.Name, err)
+        }
+
+        for _, svc := range services.Items {
+            for _, port := range svc.Spec.Ports {
+                if port.NodePort != 0 {
+                    usedPorts[port.NodePort] = true
+                }
+            }
+        }
+    }
+
+    // 2. Find the first available port in our range
+    for port := minPort; port <= maxPort; port++ {
+        if !usedPorts[int32(port)] {
+            return int32(port), nil
+        }
+    }
+
+    // 3. No ports available - cluster is at maximum capacity
+    return 0, fmt.Errorf("all NodePorts in range %d-%d are allocated (max %d servers reached)",
+        minPort, maxPort, maxPort-minPort+1)
+}
+
+// WaitForReady polls until the pod is running and returns the NodePort
+func (c *Client) WaitForReady(ctx context.Context, name string) (int32, error) {
+    // Poll for up to 5 minutes (typical Minecraft startup time)
+    timeout := time.After(5 * time.Minute)
+    ticker := time.NewTicker(5 * time.Second)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-timeout:
+            return 0, fmt.Errorf("timeout waiting for server %s to become ready", name)
+
+        case <-ticker.C:
+            // 1. Check if Pod is Running and Ready
+            pods, err := c.clientset.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{
+                LabelSelector: fmt.Sprintf("app=minecraft,server=%s", name),
+            })
+            if err != nil {
+                continue // Retry on transient errors
+            }
+
+            if len(pods.Items) == 0 {
+                continue // Pod not created yet
+            }
+
+            pod := pods.Items[0]
+
+            // Check if pod is Running
+            if pod.Status.Phase != corev1.PodRunning {
+                continue
+            }
+
+            // Check if readiness probe has passed
+            ready := false
+            for _, condition := range pod.Status.Conditions {
+                if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+                    ready = true
+                    break
+                }
+            }
+
+            if !ready {
+                continue
+            }
+
+            // 2. Pod is ready! Retrieve the NodePort from Service
+            svc, err := c.clientset.CoreV1().Services(c.namespace).Get(ctx, name, metav1.GetOptions{})
+            if err != nil {
+                return 0, fmt.Errorf("server is ready but failed to get service: %w", err)
+            }
+
+            if len(svc.Spec.Ports) == 0 {
+                return 0, fmt.Errorf("service has no ports configured")
+            }
+
+            nodePort := svc.Spec.Ports[0].NodePort
+            if nodePort == 0 {
+                return 0, fmt.Errorf("service NodePort not assigned")
+            }
+
+            return nodePort, nil
+        }
+    }
+}
+```
 
 ### What to Learn
 
-**Kubernetes YAML Syntax:**
-- apiVersion, kind, metadata, spec structure
-- Labels and selectors
-- Resource organization
+**Go Programming:**
+- Polling patterns
+- Safety checks
+- "Fail Fast" logic
 
-**Core K8s Concepts:**
-- **Deployment**: Stateless applications (frontend, backend API)
-- **StatefulSet**: Stateful applications (database, Minecraft servers)
-- **Service**: Network access (ClusterIP, LoadBalancer)
-- **PersistentVolumeClaim**: Storage for stateful data
-- **Secret**: Sensitive data storage
-- **ResourceQuota**: Resource limits per namespace
-- **Namespace**: Isolation boundaries
-- **ConfigMap**: Configuration data
+**CLI Libraries:**
+- Cobra
+- Viper
 
-**kubectl Commands:**
-- apply, get, describe, logs, exec, delete
-- Namespace-specific operations
-- Resource inspection and debugging
+**client-go Library:**
+- Typed clients
+- Label selectors
+- Watching resources
 
 ### Deliverables
-- Complete K8s manifests for all components
-- Successfully deployed to local K3s cluster
-- Can create Minecraft servers via API
-- Database persists data across pod restarts
-- All services communicating properly
+- [ ] CLI tool implements "Pre-flight" memory check
+- [ ] create command waits for Pod to be Ready
+- [ ] create command returns the specific NodePort (e.g., 30001) to the user
+- [ ] Comprehensive help text and table formatting
 
 ---
 
-## Phase 4: Frontend Dashboard
-
-### Goals
-- Build React dashboard for user interaction
-- Implement authentication flow
-- Server management UI
-
-### Pages to Implement
-
-**Login Page:**
-- Login form (username/email, password)
-- JWT token storage (localStorage)
-- Redirect to dashboard on success
-
-**Register Page:**
-- Registration form
-- Validation
-- Success flow to login
-
-**Dashboard:**
-- Display user's servers (list view)
-- Server cards showing: name, status, connection info
-- Action buttons: Start, Stop, Delete
-- "Create New Server" button
-
-**Create Server Page:**
-- Form: server name, Minecraft version, game mode, max players
-- Submit to API
-- Redirect to dashboard
-
-### Components
-- ServerCard (individual server display)
-- ProtectedRoute (authentication guard)
-- Navigation/Layout
-- Loading states
-- Error handling
-
-### What to Learn
-
-**React + TypeScript:**
-- Functional components
-- Hooks (useState, useEffect)
-- Props and state management
-- Conditional rendering
-- Event handling
-
-**React Router:**
-- Client-side routing
-- Protected routes
-- Navigation between pages
-
-**API Integration:**
-- Axios for HTTP requests
-- Async/await patterns
-- Error handling
-- Authentication headers (JWT)
-
-**Modern Frontend Tooling:**
-- Vite build tool
-- TypeScript in React
-- Environment variables
-- Docker multi-stage builds for production
-
-### Deliverables
-- Working React dashboard with all pages
-- Full authentication flow (register, login, logout)
-- Can create, start, stop, delete servers through UI
-- Responsive design (basic styling)
-- Dockerized and ready to deploy
-- Successfully tested against backend API
-
----
-
-## Phase 5: Terraform Infrastructure
+## Phase 4: Terraform Infrastructure
 
 ### Goals
 - Define AWS infrastructure as code
 - Provision EC2 instance with K3s
-- Automate infrastructure deployment
+- Configure Security Groups for NodePort Range
+- Provision adequate storage for Local Path
 
-### Infrastructure to Define
+### Main Configuration Files Changes
 
-**Networking:**
-- VPC (10.0.0.0/16)
-- Public subnet
-- Internet Gateway
-- Route table
+**variables.tf:**
+```hcl
+variable "node_port_range_start" {
+  description = "Start of NodePort range"
+  type        = number
+  default     = 30000
+}
 
-**Security:**
-- Security Group with rules:
-  - SSH (port 22) - restricted to your IP
-  - HTTP (port 80) - public
-  - HTTPS (port 443) - public
-  - Minecraft ports (25565-25575) - public
-- SSH key pair
+variable "node_port_range_end" {
+  description = "End of NodePort range"
+  type        = number
+  default     = 30015 # Accommodates 15 servers
+}
+```
 
-**Compute:**
-- EC2 instance (t3.large: 2 vCPU, 8GB RAM)
-- Ubuntu 22.04 LTS
-- 50GB EBS volume
-- Elastic IP (static public IP)
+**security.tf (UPDATED):**
+```hcl
+resource "aws_security_group" "k3s" {
+  name        = "${var.cluster_name}-sg"
+  description = "Security group for K3s cluster"
+  vpc_id      = aws_vpc.main.id
 
-**Automation:**
-- User data script to install K3s on first boot
-- Automatic kubeconfig setup
+  # SSH access
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.my_ip]
+    description = "SSH from my IP"
+  }
 
-**Optional:**
-- S3 bucket for backups
-- Route53 DNS records
-- IAM roles for EC2
+  # Kubernetes API
+  ingress {
+    from_port   = 6443
+    to_port     = 6443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Kubernetes API"
+  }
+
+  # UPDATED: Minecraft NodePort Range
+  ingress {
+    from_port   = var.node_port_range_start
+    to_port     = var.node_port_range_end
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Minecraft NodePorts (30000-30015)"
+  }
+
+  # Allow all outbound
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.cluster_name}-sg"
+  }
+}
+```
+
+**compute.tf (UPDATED):**
+```hcl
+resource "aws_instance" "k3s" {
+  # ... (other config same) ...
+
+  root_block_device {
+    volume_size = 100 # INCREASED: To accommodate 15 servers x 5GB + OS
+    volume_type = "gp3"
+  }
+
+  # ... (user_data same) ...
+}
+```
 
 ### What to Learn
 
-**Terraform Basics:**
-- HCL syntax (resource, variable, output, data)
-- Resource dependencies
-- State management
-- terraform init, plan, apply, destroy
-
 **Terraform AWS Provider:**
-- VPC and networking resources
-- EC2 instances and AMI selection
-- Security groups
-- Data sources (AMI lookup)
+- Volume Sizing (100GB buffer)
+- Security Group Ranges
 
 **AWS Networking:**
-- VPC concepts
-- Subnets (public vs private)
-- Internet gateways
-- Route tables
-- Security groups
+- VPC, Subnets, Route Tables
 
-**Cloud-Init / User Data:**
-- EC2 bootstrap scripts
-- Bash scripting basics
-- K3s installation automation
-
-**SSH Key Management:**
-- Generating SSH keys
-- Public vs private keys
-- Using keys to access EC2
+**K3s Installation:**
+- User Data scripts
 
 ### Deliverables
-- Complete Terraform configuration (main.tf, variables.tf, outputs.tf)
-- Successfully deployed AWS infrastructure
-- K3s cluster running on EC2
-- Can connect via kubectl from local machine
-- Elastic IP assigned (static access)
-- Documented deployment commands
-- Can tear down and recreate infrastructure reliably
+- [ ] Security Group opens ports 30000-30015
+- [ ] EC2 instance provisioned with 100GB GP3 storage
+- [ ] Admin kubeconfig retrievable via SCP
+- [ ] Can connect to cluster with kubectl
+
+---
+
+## Phase 5: User Onboarding Automation
+
+### Goals
+- Automate user namespace and RBAC creation
+- Generate user-specific kubeconfig files
+- Document user distribution process
+
+### User Creation Script
+
+Scripts `create-user.sh` and `delete-user.sh` remain valid as per original plan.
+
+### Deliverables
+- [ ] User creation/deletion scripts
+- [ ] Generated kubeconfig files validated
+- [ ] Documentation for admin user onboarding process
 
 ---
 
@@ -401,277 +845,68 @@ Self-service Minecraft server hosting platform where users can create, manage, a
 
 ### Goals
 - Automate building and pushing Docker images
-- Automate deployment to K3s cluster
-- Implement continuous deployment
+- Automate CLI binary builds and releases
 
-### Pipelines to Create
+### GitHub Actions Workflows
 
-**Backend Deployment:**
-- Trigger on push to main (backend/** paths)
-- Build Docker image
-- Push to Docker Hub
-- Update K8s deployment
-- Verify rollout success
-
-**Frontend Deployment:**
-- Trigger on push to main (frontend/** paths)
-- Build Docker image
-- Push to Docker Hub
-- Update K8s deployment
-- Verify rollout success
-
-**Infrastructure Changes:**
-- Manual terraform apply workflow (optional)
-
-### GitHub Secrets Needed
-- DOCKER_USERNAME
-- DOCKER_PASSWORD
-- KUBE_CONFIG (base64 encoded kubeconfig)
-
-### What to Learn
-
-**GitHub Actions:**
-- Workflow syntax (on, jobs, steps)
-- Event triggers (push, pull_request, paths)
-- Using actions from marketplace
-- Secrets management
-- Environment variables
-
-**Docker Registry:**
-- Docker Hub usage
-- Image tagging strategies (latest, commit SHA)
-- Multi-arch builds (optional)
-
-**kubectl Deployment Strategies:**
-- Rolling updates
-- kubectl set image command
-- kubectl rollout commands
-- Zero-downtime deployments
-- Health checks
-
-**CI/CD Best Practices:**
-- Separate workflows per service
-- Path-based triggers
-- Semantic versioning
-- Build artifacts and caching
+Workflows `minecraft-image.yml`, `cli-release.yml`, `test.yml` remain valid.
 
 ### Deliverables
-- Working CI/CD pipelines for backend and frontend
-- Automated deployments on git push to main
-- Docker images built and tagged with commit SHA
-- Deployment verification in workflows
-- Initial deployment script for first-time setup
-- Documentation of CI/CD process
+- [ ] Working CI/CD pipeline for Minecraft image
+- [ ] Automated CLI builds for multiple platforms
+- [ ] GitHub releases created on version tags
 
 ---
 
 ## Phase 7: Testing & Refinement
 
 ### Goals
-- End-to-end testing
+- End-to-end testing across all components
 - Bug fixes and polish
 - Performance optimization
 - Complete documentation
 
-### Testing Checklist
+### Testing Checklist (Updates)
 
-**Functionality:**
-- User registration and login flow
-- Create Minecraft server through dashboard
-- Verify K8s resources created correctly
-- Server starts and is reachable
-- Connect with Minecraft client
-- World data persists
-- Stop server (pod scales to 0, PVC remains)
-- Restart server (world data restored)
-- Delete server (all resources cleaned up)
+**Functionality Testing:**
+- [ ] Service created with NodePort type
+- [ ] NodePort assigned is within 30000-30015 range
+- [ ] Can connect with Minecraft client using EC2_IP:NODE_PORT
+- [ ] Pre-flight check prevents creating server if RAM is full
+- [ ] Storage persists on EC2 host disk (check /var/lib/rancher/k3s/storage)
+- [ ] Namespace isolation verified via RBAC
 
 **Load Testing:**
-- Create 3 servers simultaneously
-- Monitor resource usage (kubectl top nodes)
-- Verify 8GB RAM is sufficient
-- Test with multiple concurrent players
+- [ ] Create servers until RAM limit is hit
+- [ ] Verify CLI accurately reports "Cluster Full" error
+- [ ] Monitor CPU/Memory usage under load
 
-**Common Issues to Fix:**
-- Server status updates
-- LoadBalancer IP assignment delays
-- Persistent volume mounting
-- API error handling
-- Frontend data refresh
-
-### Optimizations
-
-**Backend:**
-- Database connection pooling
-- Server status caching
-- Rate limiting
-- Improved error messages
-
-**Frontend:**
-- Loading states
-- Error handling UI
-- Auto-refresh server status
-- UI/UX improvements
-
-**Kubernetes:**
-- Resource requests/limits tuning
-- Readiness/liveness probes
-- Health checks for MC servers
-
-### Documentation to Complete
+### Documentation to Complete (Updates)
 
 **README.md:**
-- Project overview
-- Architecture diagram
-- Features list
-- Tech stack
-- Deployment instructions
-- Cost breakdown
-- Usage guide
+```markdown
+## Quick Start
+
+1. Import your kubeconfig:
+   `kubecraft config import kubeconfig-yourname.yaml`
+
+2. Create a server:
+   `kubecraft server create myserver`
+   > Waiting for server to start...
+   > ✅ Server Ready! Connect to: 54.123.45.67:30001
+
+3. Connect using the IP and Port provided.
+```
 
 **ARCHITECTURE.md:**
-- Detailed architecture explanation
-- Component interactions
-- Data flow diagrams
-- Design decisions
-
-**API Documentation:**
-- All endpoints
-- Request/response formats
-- Authentication flow
-- Error codes
-
-### What to Learn
-
-**Debugging Kubernetes:**
-- Reading pod logs effectively
-- Using kubectl describe
-- Executing into pods
-- Analyzing events
-- Troubleshooting networking
-
-**Performance Monitoring:**
-- kubectl top commands
-- Resource metrics interpretation
-- Identifying bottlenecks
-- Optimization strategies
-
-**Technical Writing:**
-- Clear documentation structure
-- Architecture diagrams
-- Code examples
-- User guides
+- Update diagrams to show NodePort flow
+- Explain HostPath storage strategy
+- Detail the Memory Overcommitment strategy and safety checks
 
 ### Deliverables
-- Fully tested and working platform
-- 5 friends successfully using the platform
-- All bugs fixed
-- Performance optimized
-- Complete documentation
-- Clean, commented codebase
-
----
-
-## Phase 8: Portfolio Presentation
-
-### Goals
-- Create compelling portfolio materials
-- Prepare for interview questions
-- Record demos
-- Update resume
-
-### Portfolio Materials
-
-**Demo Video (5-10 minutes):**
-- Architecture walkthrough
-- Live deployment demonstration
-- Dashboard functionality
-- Minecraft server creation
-- K8s resource inspection
-- Cost optimization explanation
-- Scaling discussion
-
-**Portfolio Website Update:**
-- Project hero section with architecture diagram
-- Problem statement
-- Solution overview
-- Technical deep-dive
-- Key learnings
-- Code snippets (interesting parts)
-- Results/metrics
-- GitHub link
-
-**GitHub Repository Polish:**
-- Clean commit history
-- Comprehensive README
-- Code comments
-- Architecture documentation
-- Setup instructions
-- Remove secrets
-- Add LICENSE
-
-### Interview Preparation
-
-**Technical Questions to Prepare:**
-- "Why K3s instead of EKS?"
-- "How do you handle state for Minecraft servers?"
-- "What happens if the EC2 instance fails?"
-- "How would you scale this to 100 users?"
-- "Why StatefulSets instead of Deployments?"
-- "Explain your CI/CD pipeline"
-- "How do you ensure cost optimization?"
-
-**Challenges & Solutions:**
-- Hardest technical problem faced
-- Performance issues encountered
-- How you debugged K8s issues
-- Trade-offs you made
-
-**Trade-offs Discussion:**
-- Single node vs multi-node cluster
-- Cost vs availability
-- Complexity vs simplicity
-- Managed services vs self-hosted
-
-**Future Improvements:**
-- Auto-scaling based on player count
-- Multi-region deployment
-- Server templates/modpacks
-- Discord bot integration
-- Monitoring dashboards
-- Backup/restore functionality
-
-### Resume Bullet Points
-
-Key achievements to highlight:
-- Architected self-service platform on AWS with K8s and Terraform
-- Implemented IaC for reproducible deployments
-- Built REST API with K8s client for dynamic resource management
-- Optimized costs through auto-shutdown and resource quotas
-- Established CI/CD pipeline with GitHub Actions
-- Served 5 concurrent users with 15 total server instances
-
-### What to Learn
-
-**Interview Skills:**
-- STAR method for behavioral questions
-- Technical question frameworks
-- System design approach
-- Articulating trade-offs clearly
-
-**Portfolio Best Practices:**
-- Scannable layouts
-- Compelling visuals
-- Results-focused content
-- Technical depth without overwhelming
-
-### Deliverables
-- Polished portfolio page on hasanbaig.net
-- 5-10 minute demo video
-- Interview preparation document
-- Updated resume with project
-- GitHub repository showcase-ready
-- Blog post explaining project in depth
+- [ ] All functionality tested and working
+- [ ] Complete documentation suite
+- [ ] Clean, well-commented codebase
 
 ---
 
@@ -679,101 +914,65 @@ Key achievements to highlight:
 
 | Week | Phase | Focus |
 |------|-------|-------|
-| 1 | Phase 0 | Prerequisites, environment setup, foundational learning |
-| 2-3 | Phase 1 | Backend API development, K8s client library |
+| 1 | Phase 0 | Prerequisites, environment setup, Local K3s |
+| 2 | Phase 1 | Kubernetes manifests, RBAC, NodePort networking |
 | 3 | Phase 2 | Minecraft Docker image |
-| 4 | Phase 3 | Kubernetes manifests, local testing |
-| 5 | Phase 4 | Frontend React dashboard |
-| 6 | Phase 5 | Terraform infrastructure, AWS deployment |
-| 7 | Phase 6 | CI/CD pipeline setup |
-| 8 | Phase 7 | Testing, bug fixes, optimization |
-| 9 | Phase 8 | Portfolio presentation, interview prep |
+| 4-5 | Phase 3 | CLI tool with pre-flight checks and polling |
+| 6 | Phase 4 | Terraform infrastructure (AWS deployment) |
+| 7 | Phase 5 | User onboarding automation |
+| 8 | Phase 6 | CI/CD pipeline setup |
+| 9 | Phase 7 | Testing, bug fixes, documentation |
 
-**Total Duration:** ~9 weeks (2-3 months) at 10-15 hours/week
+**Total Duration:** ~9 weeks (2-2.5 months) at 10-15 hours/week
 
 ---
 
 ## Success Criteria
 
 **MVP (Minimum Viable Product):**
-- Users can register and login
-- Users can create 1 Minecraft server
-- Server starts and can be connected to
-- World data persists
-- Deployed on AWS with Terraform
-- Basic documentation
+- [ ] One user can import kubeconfig into CLI
+- [ ] User can create 1 Minecraft server
+- [ ] Server starts and is accessible via NodePort
+- [ ] World data persists across stop/start
+- [ ] Deployed on AWS with Terraform
 
 **Complete Project:**
-- All features working (create, start, stop, delete)
-- Up to 3 servers per user
-- 5 friends actively using
-- CI/CD pipeline functional
-- Complete documentation
-- Portfolio writeup and demo video
-
-**Stretch Goals:**
-- Idle auto-shutdown
-- Backup/restore to S3
-- Monitoring dashboard (Prometheus/Grafana)
-- Multiple Minecraft versions support
-- Server templates (vanilla, modded, etc.)
+- [ ] All CLI commands functional with safety checks
+- [ ] RBAC properly isolating users
+- [ ] Up to 3 servers per user (ResourceQuota enforced)
+- [ ] 5 users actively using the platform
+- [ ] Automated user onboarding
+- [ ] CI/CD pipeline functional
 
 ---
 
-## Key Learning Outcomes
+## Cost Breakdown (Revised)
 
-**DevOps & Platform Engineering:**
-- Infrastructure as Code with Terraform
-- Kubernetes orchestration and administration
-- CI/CD pipeline implementation
-- Container management and optimization
-- Cloud architecture on AWS
+**Monthly Costs:**
+- EC2 t3.large: ~$60/month
+- EBS Storage (100GB gp3): ~$8/month
+- Data Transfer: ~$5/month
+- Load Balancers: $0 (Removed)
+- **Total: ~$73/month** (~$15/user for 5 users)
 
-**Backend Development:**
-- RESTful API design
-- Authentication and authorization
-- Database design and management
-- Kubernetes client library usage
-- Async operations handling
-
-**Frontend Development:**
-- Modern React with TypeScript
-- State management
-- API integration
-- User authentication flows
-
-**System Design:**
-- Multi-tenancy patterns
-- Resource isolation
-- Cost optimization strategies
-- Scalability considerations
-- Trade-off analysis
-
-**Production Operations:**
-- Monitoring and debugging
-- Performance optimization
-- Documentation
-- Testing strategies
+**Cost Optimization:**
+- Use Spot Instance (60-70% cheaper, with interruption risk)
+- Implement idle server auto-shutdown
 
 ---
 
-## Resources
+## Key Design Decisions (Revised)
 
-**Official Documentation:**
-- Kubernetes: https://kubernetes.io/docs/
-- K3s: https://docs.k3s.io/
-- Terraform: https://developer.hashicorp.com/terraform
-- Docker: https://docs.docker.com/
-- Node.js K8s Client: https://github.com/kubernetes-client/javascript
+### 1. Networking: NodePort vs LoadBalancer
+- **Chosen:** NodePort
+- **Why:** Massive cost savings ($0 vs $225/mo). Sufficient for small scale.
+- **Trade-off:** Non-standard ports (e.g., :30001) for users.
 
-**Learning Paths:**
-- Kubernetes Basics Tutorial
-- Terraform AWS Provider Guide
-- React Official Tutorial
-- TypeScript Handbook
+### 2. Storage: HostPath (Local) vs EBS
+- **Chosen:** Local Path (K3s default)
+- **Why:** Simpler, faster, no AWS volume attachment limits (max ~25 attachments per instance).
+- **Trade-off:** Data is tied to this specific EC2 instance (fine for single-node).
 
-**Tools:**
-- k3d for local K3s clusters
-- kubectl cheatsheet
-- Postman for API testing
-- VS Code with relevant extensions
+### 3. Safety: Strict Limits & Pre-flight Checks
+- **Chosen:** CLI-side capacity checking
+- **Why:** Prevents "noisy neighbors" from crashing the shared node via OOM (Out of Memory).
