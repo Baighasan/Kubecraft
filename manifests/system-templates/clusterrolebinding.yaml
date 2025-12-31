@@ -5,10 +5,9 @@ metadata:
   labels:
     app: kubecraft
     component: rbac
-subjects:
-  - kind: ServiceAccount
-    name: {username}
-    namespace: mc-{username}
+  annotations:
+    description: "Binds the clusterrole to multiple users"
+subjects: []
 roleRef:
   kind: ClusterRole
   name: kc-capacity-checker
