@@ -17,13 +17,13 @@ echo -e "${GREEN}Applying System RBAC Manifests...${NC}"
 
 # Check if kubectl is available
 if ! command -v kubectl &> /dev/null; then
-    echo -e "${RED}Error: kubectl not found. Please install kubectl.${NC}"
+    echo -e "${RED}ERROR: kubectl not found. Please install kubectl.${NC}"
     exit 1
 fi
 
 # Check if manifest directory exists
 if [ ! -d "${SYSTEM_MANIFEST_DIR}" ]; then
-    echo -e "${RED}Error: Manifest directory not found: ${SYSTEM_MANIFEST_DIR}${NC}"
+    echo -e "${RED}ERROR: Manifest directory not found: ${SYSTEM_MANIFEST_DIR}${NC}"
     exit 1
 fi
 
@@ -33,7 +33,7 @@ if [ -f "${CLUSTERROLE}" ]; then
     echo -e "${YELLOW}-> Applying ClusterRole...${NC}"
     kubectl apply -f "${CLUSTERROLE}"
 else
-    echo -e "${RED}Error: ${CLUSTERROLE} not found${NC}"
+    echo -e "${RED}ERROR: ${CLUSTERROLE} not found${NC}"
     exit 1
 fi
 
@@ -43,7 +43,7 @@ if [ -f "${CLUSTERROLEBINDING}" ]; then
     echo -e "${YELLOW}-> Applying ClusterRoleBinding...${NC}"
     kubectl apply -f "${CLUSTERROLEBINDING}"
 else
-    echo -e "${RED}Error: ${CLUSTERROLEBINDING} not found${NC}"
+    echo -e "${RED}ERROR: ${CLUSTERROLEBINDING} not found${NC}"
     exit 1
 fi
 

@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registration-service
+  namespace: kubecraft-system
+  labels:
+    app: kubecraft
+    component: registration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubecraft
+      component: registration
+  template:
+    metadata:
+      labels:
+        app: kubecraft
+        component: registration
+    spec:
+      serviceAccountName: registration-service
+      containers:
+      - name: registration
+        image: dockerhub/kubecraft-registration:latest  # placeholder
+        ports:
+        - containerPort: 8080
+        env:
+        - name: MAX_USERS
+          value: "15"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
