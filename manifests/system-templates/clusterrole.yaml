@@ -6,7 +6,7 @@ metadata:
     app: kubecraft
     component: rbac
   annotations:
-    description: "Read only permissions for pre-flight capacity checks. Allows users to check cluster memory and port availability"
+    description: "Read only permissions for pre-flight capacity checks. Allows users to check cluster memory and port availability."
 rules:
 - apiGroups: [""]
   resources: ["namespaces", "services", "pods"]

@@ -35,14 +35,16 @@ if [ -z "${USERNAME}" ]; then
     exit 1
 fi
 
-# Validate username format (Minecraft username rules)
+# Validate username format (Kubernetes DNS label compatible)
 # - Length: 3-16 characters
-# - Characters: a-z, 0-9, underscore (_)
-if ! [[ "${USERNAME}" =~ ^[a-z0-9_]{3,16}$ ]]; then
+# - Characters: a-z, 0-9 only
+# - Must start and end with alphanumeric character
+if ! [[ "${USERNAME}" =~ ^[a-z0-9]{3,16}$ ]]; then
     echo -e "${RED}ERROR: Invalid username '${USERNAME}'${NC}"
     echo "Username must:"
     echo "  • Be 3-16 characters long"
-    echo "  • Contain only lowercase letters (a-z), numbers (0-9), or underscores (_)"
+    echo "  • Contain only lowercase letters (a-z) and numbers (0-9)"
+    echo "  • No special characters"
     exit 1
 fi
 
@@ -54,7 +56,7 @@ fi
 
 # Replace {username} placeholders using sed & apply user manifests in order
 for manifest in namespace resourcequota serviceaccount role rolebinding; do
-    manifest_file = "${USER_MANIFEST_DIR}/${manifest}.yaml"
+    manifest_file="${USER_MANIFEST_DIR}/${manifest}.yaml"
 
     if [ ! -f "${manifest_file}" ]; then
         echo -e "${RED}ERROR: ${manifest_file} not found${NC}"
@@ -65,5 +67,40 @@ for manifest in namespace resourcequota serviceaccount role rolebinding; do
     sed "s/{username}/${USERNAME}/g" "${manifest_file}" | kubectl apply -f -
 done
 
-# Extract ServiceAccount token
-# Generate kubeconfig-{username}.yaml file
+# Update ClusterRoleBinding to grant capacity-check permissions
+echo -e "${YELLOW}-> Adding user to ClusterRoleBinding...${NC}"
+
+# Check if subjects array is empty/null (omitted field returns empty string)
+SUBJECTS_OUTPUT=$(kubectl get clusterrolebinding kc-users-capacity-check -o jsonpath='{.subjects}')
+
+if [ -z "$SUBJECTS_OUTPUT" ]; then
+  # First user - initialize the subjects array
+  kubectl patch clusterrolebinding kc-users-capacity-check --type='json' -p='[
+    {
+      "op": "replace",
+      "path": "/subjects",
+      "value": [{
+        "kind": "ServiceAccount",
+        "name": "'"${USERNAME}"'",
+        "namespace": "mc-'"${USERNAME}"'"
+      }]
+    }
+  ]'
+else
+  # Append to existing subjects array
+  kubectl patch clusterrolebinding kc-users-capacity-check --type='json' -p='[
+    {
+      "op": "add",
+      "path": "/subjects/-",
+      "value": {
+        "kind": "ServiceAccount",
+        "name": "'"${USERNAME}"'",
+        "namespace": "mc-'"${USERNAME}"'"
+      }
+    }
+  ]'
+fi
+
+# Register user (implement after auth is complete)
+
+echo -e "${GREEN}User successfully created!${NC}"
