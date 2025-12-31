@@ -22,4 +22,4 @@ rules:
 # Apps API group
 - apiGroups: ["apps"]
   resources: ["statefulsets"]
-  verbs: ["create", "delete", "get", "list", "patch"]
+  verbs: ["create", "get", "list", "patch", "update"]

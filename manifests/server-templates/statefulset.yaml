@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {servername}
+  namespace: mc-{username}
+  labels:
+    app: minecraft
+    server: {servername}
+    owner: {username}
+spec:
+  serviceName: {servername}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minecraft
+      server: {servername}
+  template:
+    metadata:
+      labels:
+        app: minecraft
+        server: {servername}
+    spec:
+      containers:
+        - name: minecraft
+          image: itzg/minecraft-server
+          env:
+          - name: EULA
+            value: "TRUE"
+          - name: VERSION
+            value: "1.21.11"
+          - name: GAME_MODE
+            value: "survival"
+          - name: MAX_PLAYERS
+            value: "5"
+          ports:
+          - containerPort: 25565
+            name: minecraft
+          resources:
+            requests:
+              memory: "768Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "750m"
+          readinessProbe:
+            tcpSocket:
+              port: 25565
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          volumeMounts:
+          - name: mc
+            mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: mc
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: "local-path"
+        resources:
+          requests:
+            storage: 5Gi

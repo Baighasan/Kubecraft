@@ -3,6 +3,10 @@ kind: RoleBinding
 metadata:
   name: binding-{username}
   namespace: mc-{username}
+  labels:
+    app: kubecraft
+    component: rbac
+    user: {username}
 subjects:
 - kind: ServiceAccount
   name: {username}

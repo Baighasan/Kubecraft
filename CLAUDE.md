@@ -17,7 +17,7 @@ Self-service Minecraft server hosting platform where users can create, manage, a
 **Core Components:**
 1. **CLI Tool**: Go-based command-line interface with direct Kubernetes API access and **pre-flight capacity checks**
 2. **User Namespaces**: One namespace per user with RBAC-enforced isolation
-3. **Minecraft Pods**: StatefulSets within user namespaces (up to 3 per user)
+3. **Minecraft Pods**: StatefulSets within user namespaces (up to 1 per user)
 4. **System Namespace**: Monitoring and automation services
 
 **Tech Stack:**
@@ -31,7 +31,7 @@ Self-service Minecraft server hosting platform where users can create, manage, a
 ## Project Scope
 
 **Users:** 5 people
-**Servers per user:** Up to 3
+**Servers per user:** Up to 1
 **Concurrent servers:** 2-3 running simultaneously (strict memory limits applied)
 **Total servers:** Up to 15 (most stopped to save resources)
 **Monthly cost:** ~$73 (single t3.large EC2 instance with 100GB storage)
@@ -125,7 +125,7 @@ spec:
     requests.memory: 1536Mi    # Reduced: allows 2 servers avg per user (2 × 768Mi)
     limits.cpu: "2250m"        # Reduced: allows up to 3 servers max (3 × 750m)
     limits.memory: 3Gi         # Reduced: allows up to 3 servers max (3 × 1Gi)
-    persistentvolumeclaims: "3"
+    persistentvolumeclaims: "1"
 
 # CAPACITY PLANNING NOTE:
 # t3.large total: 8GB RAM, 2 vCPU

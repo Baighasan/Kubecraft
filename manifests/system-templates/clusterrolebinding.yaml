@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kc-users-capacity-check
+  labels:
+    app: kubecraft
+    component: rbac
+subjects:
+  - kind: ServiceAccount
+    name: {username}
+    namespace: mc-{username}
+roleRef:
+  kind: ClusterRole
+  name: kc-capacity-checker
+  apiGroup: rbac.authorization.k8s.io

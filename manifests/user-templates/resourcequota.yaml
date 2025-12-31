@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: mc-compute-resources
+  namespace: mc-{username}
+  labels:
+    app: kubecraft
+    user: {username}
+spec:
+  hard:
+    requests.cpu: "1500m"
+    requests.memory: 1536Mi
+    limits.cpu: "2250m"
+    limits.memory: 3Gi
+    persistentvolumeclaims: "1"
