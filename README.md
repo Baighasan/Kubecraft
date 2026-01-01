@@ -2,6 +2,6 @@
 
 Self-service Minecraft server hosting platform. Create, manage, and connect to Minecraft servers through a web dashboard.
 
-**Stack:** Node.js, React, Kubernetes, PostgreSQL, Terraform, AWS
+**Stack:** Kubernetes, Go, Shell, Terraform, AWS
 
 🚧 Currently In Development
