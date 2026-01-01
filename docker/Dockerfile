@@ -15,14 +15,6 @@ WORKDIR /data
 
 # Env variables
 ENV VERSION=1.21.11 \
-  GAME_MODE=survival \
-  DIFFICULTY=normal \
-  MAX_PLAYERS=20 \
-  VIEW_DISTANCE=10 \
-  PVP=true \
-  ENABLE_COMMAND_BLOCK=false \
-  SPAWN_PROTECTION=16 \
-  MOTD="Test Server" \
   JAVA_MEMORY=768M
 
 # Copy startup script

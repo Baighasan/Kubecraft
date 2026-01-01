@@ -1,17 +1,16 @@
 #!/bin/bash
 
-cd /data
+cd /data || exit
 
 # Download Paper server if not present
 if [ ! -f server.jar ]; then
   echo "Downloading Paper server version 1.21.11"
 
   PROJECT="paper"
-  MINECRAFT_VERSION=${VERSION}
   USER_AGENT="kubecraft/1.0.0 (baig.hasan@outlook.com)"
 
   # First check if the requested version has a stable build
-  BUILDS_RESPONSE=$(curl -s -H "User-Agent: $USER_AGENT" https://fill.papermc.io/v3/projects/${PROJECT}/versions/${MINECRAFT_VERSION}/builds)
+  BUILDS_RESPONSE=$(curl -s -H "User-Agent: $USER_AGENT" https://fill.papermc.io/v3/projects/${PROJECT}/versions/${VERSION}/builds)
 
   # Check if the API returned an error
   if echo "$BUILDS_RESPONSE" | jq -e '.ok == false' > /dev/null 2>&1; then
@@ -62,7 +61,6 @@ fi
 echo "Starting Minecraft server..."
 echo "Memory: ${JAVA_MEMORY}"
 echo "Version: ${VERSION}"
-echo "Game Mode: ${GAME_MODE}"
 
 # Start server with optimized JVM flags
 exec java -Xms${JAVA_MEMORY} -Xmx${JAVA_MEMORY} \
