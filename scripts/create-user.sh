@@ -1,8 +1,16 @@
 #!/bin/bash
-USERNAME=$1
 
 # Exit on errors
 set -euo pipefail
+
+USERNAME=$1
+
+# Validate input
+if [ -z "${USERNAME}" ]; then
+    echo -e "${RED}ERROR: Username is required${NC}"
+    echo "Usage: $0 <username>"
+    exit 1
+fi
 
 # Get script directory for relative paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,13 +33,6 @@ fi
 # Check if manifest directory exists
 if [ ! -d "${USER_MANIFEST_DIR}" ]; then
     echo -e "${RED}ERROR: Manifest directory not found: ${USER_MANIFEST_DIR}${NC}"
-    exit 1
-fi
-
-# Validate input
-if [ -z "${USERNAME}" ]; then
-    echo -e "${RED}ERROR: Username is required${NC}"
-    echo "Usage: $0 <username>"
     exit 1
 fi
 
