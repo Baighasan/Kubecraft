@@ -4,7 +4,7 @@ metadata:
   name: {servername}
   namespace: mc-{username}
   labels:
-    app: kubecraft
+    app: minecraft
     server: {servername}
 spec:
   ports:

@@ -3,6 +3,9 @@ kind: Role
 metadata:
   namespace: mc-{username}
   name: minecraft-manager
+  labels:
+    app: kubecraft
+    component: rbac
 rules:
 # Core API group
 - apiGroups: [""]
@@ -22,4 +25,4 @@ rules:
 # Apps API group
 - apiGroups: ["apps"]
   resources: ["statefulsets"]
-  verbs: ["create", "get", "list", "patch", "update"]
+  verbs: ["create", "get", "list", "patch", "update", "delete"]

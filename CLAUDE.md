@@ -310,232 +310,71 @@ User's Computer                    EC2 Instance (Kubernetes Cluster)
 - Test user namespace isolation locally
 - **Switch networking model to NodePort**
 
-### Manifests to Create
+### Manifests Overview
 
-**User Namespace Template (per user):**
-```yaml
-# namespace.yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: mc-{username}
-  labels:
-    app: kubecraft
-    user: {username}
+All manifests are located in the `manifests/` directory, organized by purpose. These are templates with placeholders (e.g., `{username}`, `{servername}`) that get populated dynamically by the registration service or CLI tool.
 
----
-# resourcequota.yaml
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: compute-resources
-  namespace: mc-{username}
-spec:
-  hard:
-    requests.cpu: "1500m"      # Reduced: allows 2 servers avg per user (2 × 500m)
-    requests.memory: 1536Mi    # Reduced: allows 2 servers avg per user (2 × 768Mi)
-    limits.cpu: "2250m"        # Reduced: allows up to 3 servers max (3 × 750m)
-    limits.memory: 3Gi         # Reduced: allows up to 3 servers max (3 × 1Gi)
-    persistentvolumeclaims: "1"
+**📁 manifests/user-templates/** - Per-user namespace resources (created during registration)
+- **namespace.yaml** - Creates `mc-{username}` namespace with `app: kubecraft` label
+- **serviceaccount.yaml** - ServiceAccount for user authentication
+- **resourcequota.yaml** - Enforces compute limits per user:
+  - CPU: 1500m request, 2250m limit
+  - Memory: 1536Mi request, 3Gi limit
+  - PVCs: max 1 per namespace
+- **role.yaml** - `minecraft-manager` Role granting permissions for:
+  - PVCs and Services (create, delete, get, list)
+  - StatefulSets (create, get, list, patch, update, delete)
+  - Pods and pod logs (read-only)
+- **rolebinding.yaml** - Binds the Role to the user's ServiceAccount
 
-# CAPACITY PLANNING NOTE:
-# t3.large total: 8GB RAM, 2 vCPU
-# System overhead (K3s, OS, monitoring): ~2GB RAM, ~500m CPU
-# Available for workloads: ~6GB RAM, ~1.5 vCPU
-#
-# Per-server resources:
-#   requests: 768Mi RAM, 500m CPU
-#   limits: 1Gi RAM, 750m CPU
-#
-# Capacity calculation:
-#   Average case (2 servers running): 2 × 768Mi = 1.5GB RAM
-#   Max case (3 servers running): 3 × 1Gi = 3GB RAM
-#   Total cluster capacity: 5 users × 3GB = 15GB potential, but only ~4-5 servers run concurrently
-#
-# Safety: Pre-flight check prevents server creation if available RAM < 1.5GB
+**📁 manifests/server-templates/** - Minecraft server resources (created by CLI)
+- **statefulset.yaml** - Minecraft server StatefulSet with:
+  - Container image: `hasanbaig786/kubecraft`
+  - Resource requests: 768Mi RAM, 500m CPU
+  - Resource limits: 1Gi RAM, 750m CPU
+  - Volume mount: `/data` (for world persistence)
+  - Readiness probe: TCP socket on port 25565
+  - Environment variables: VERSION, GAME_MODE, MAX_PLAYERS, EULA
+- **service.yaml** - NodePort Service exposing port 25565 (NodePort auto-assigned or manually set 30000-30015)
 
----
-# role.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: minecraft-manager
-  namespace: mc-{username}
-rules:
-- apiGroups: [""]
-  resources: ["persistentvolumeclaims", "services"]
-  verbs: ["get", "list", "create", "update", "delete"]
-- apiGroups: ["apps"]
-  resources: ["statefulsets"]
-  verbs: ["get", "list", "create", "update", "delete", "patch"]
-- apiGroups: [""]
-  resources: ["pods", "pods/log"]
-  verbs: ["get", "list"]
-# Note: metrics.k8s.io removed - capacity checks use pod.Spec.Resources instead
+**📁 manifests/system-templates/** - Cluster-wide RBAC (applied once by admin)
+- **clusterrole.yaml** - `kc-capacity-checker` ClusterRole for pre-flight checks:
+  - Read-only access to namespaces, services, pods (for capacity validation)
+- **clusterrolebinding.yaml** - `kc-users-capacity-check` binding:
+  - Subjects populated dynamically during user registration
+  - Grants all users capacity-checking permissions
 
----
-# rolebinding.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {username}-binding
-  namespace: mc-{username}
-subjects:
-- kind: ServiceAccount
-  name: {username}
-  namespace: mc-{username}
-roleRef:
-  kind: Role
-  name: minecraft-manager
-  apiGroup: rbac.authorization.k8s.io
+**📁 manifests/registration-templates/** - Registration service infrastructure (applied once by admin)
+- **registration-namespace.yaml** - `kubecraft-system` namespace for system components
+- **registration-serviceaccount.yaml** - ServiceAccount for the registration service pod
+- **registration-clusterrole.yaml** - `kc-registration-admin` ClusterRole with elevated permissions:
+  - Create namespaces, ServiceAccounts, Roles, RoleBindings, ResourceQuotas
+  - Update ClusterRoleBindings (to add new users)
+  - Generate ServiceAccount tokens
+- **registration-clusterrolebinding.yaml** - Binds ClusterRole to registration ServiceAccount
+- **registration-deployment.yaml** - Deployment for registration HTTP service:
+  - Replicas: 1
+  - Resource requests: 128Mi RAM, 100m CPU
+  - Resource limits: 256Mi RAM, 200m CPU
+  - Environment: MAX_USERS=15
+- **registration-service.yaml** - NodePort 30099 Service for CLI registration endpoint
 
----
-# serviceaccount.yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: {username}
-  namespace: mc-{username}
-
----
-# clusterrole.yaml (Applied once by admin, shared by all users)
-# This grants read-only access to namespaces and services for capacity/port checks
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: kubecraft-capacity-checker
-rules:
-- apiGroups: [""]
-  resources: ["namespaces"]
-  verbs: ["get", "list"]
-- apiGroups: [""]
-  resources: ["services", "pods"]
-  verbs: ["get", "list"]
-  # Users can only list across mc-* namespaces (enforced by label selector in code)
-
----
-# clusterrolebinding.yaml (Applied once by admin)
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kubecraft-users-capacity-check
-subjects:
-# Add each user's ServiceAccount here during onboarding
-- kind: ServiceAccount
-  name: {username}
-  namespace: mc-{username}
-roleRef:
-  kind: ClusterRole
-  name: kubecraft-capacity-checker
-  apiGroup: rbac.authorization.k8s.io
+**CAPACITY PLANNING NOTE:**
 ```
+t3.large total: 8GB RAM, 2 vCPU
+System overhead (K3s, OS, monitoring): ~2GB RAM, ~500m CPU
+Available for workloads: ~6GB RAM, ~1.5 vCPU
 
-**Minecraft Server Template (within user namespace):**
-```yaml
-# statefulset.yaml
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: {servername}
-  namespace: mc-{username}
-  labels:
-    app: minecraft
-    server: {servername}
-    owner: {username}
-spec:
-  serviceName: {servername}
-  replicas: 1
-  selector:
-    matchLabels:
-      app: minecraft
-      server: {servername}
-  template:
-    metadata:
-      labels:
-        app: minecraft
-        server: {servername}
-    spec:
-      containers:
-      - name: minecraft
-        image: your-dockerhub/minecraft:latest
-        env:
-        - name: VERSION
-          value: "1.20.1"
-        - name: GAME_MODE
-          value: "survival"
-        - name: MAX_PLAYERS
-          value: "20"
-        ports:
-        - containerPort: 25565
-          protocol: TCP
-        resources:
-          # STRICT LIMITS ENFORCED to prevent Node OOM
-          requests:
-            memory: "768Mi"  # Reduced: realistic for Minecraft (768MB)
-            cpu: "500m"
-          limits:
-            memory: "1Gi"    # Reduced: prevents memory overcommitment
-            cpu: "750m"      # Reduced: allows more concurrent servers
-        volumeMounts:
-        - name: data
-          mountPath: /data
-        readinessProbe:
-          tcpSocket:
-            port: 25565
-          initialDelaySeconds: 30
-          periodSeconds: 10
-  volumeClaimTemplates:
-  - metadata:
-      name: data
-    spec:
-      accessModes: ["ReadWriteOnce"]
-      storageClassName: "local-path" # Writes to host disk
-      resources:
-        requests:
-          storage: 5Gi
+Per-server resources:
+  requests: 768Mi RAM, 500m CPU
+  limits: 1Gi RAM, 750m CPU
 
----
-# service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: {servername}
-  namespace: mc-{username}
-spec:
-  type: NodePort # CHANGED: No LoadBalancer costs
-  selector:
-    app: minecraft
-    server: {servername}
-  ports:
-  - port: 25565
-    targetPort: 25565
-    # nodePort will be assigned automatically (30000-32767) 
-    # or manually assigned by CLI logic
-    protocol: TCP
-```
+Capacity calculation:
+  Average case (2 servers running): 2 × 768Mi = 1.5GB RAM
+  Max case (3 servers running): 3 × 1Gi = 3GB RAM
+  Total cluster capacity: 5 users × 3GB = 15GB potential, but only ~4-5 servers run concurrently
 
-**System Namespace (Optional):**
-```yaml
-# idle-monitor-cronjob.yaml
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: idle-monitor
-  namespace: system
-spec:
-  schedule: "*/30 * * * *"  # Every 30 minutes
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          serviceAccountName: idle-monitor
-          containers:
-          - name: monitor
-            image: your-dockerhub/idle-monitor:latest
-            env:
-            - name: IDLE_THRESHOLD_MINUTES
-              value: "60"
-          restartPolicy: OnFailure
+Safety: Pre-flight check prevents server creation if available RAM < 1.5GB
 ```
 
 ### What to Learn

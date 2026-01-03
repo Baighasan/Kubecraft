@@ -6,7 +6,7 @@ metadata:
   labels:
     app: minecraft
     server: {servername}
-    owner: {username}
+    user: {username}
 spec:
   serviceName: {servername}
   replicas: 1
