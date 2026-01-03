@@ -23,12 +23,15 @@ Self-service Minecraft server hosting platform where users can create, manage, a
 
 **Tech Stack:**
 - Infrastructure: AWS (EC2, VPC), Terraform, K3s
-- CLI Tool: Go, client-go (Kubernetes client library)
+- Application Code: Go 1.25.5 with monorepo structure (single module, multiple binaries)
+- CLI Tool: Go with Cobra framework, client-go (Kubernetes client library)
+- Registration Service: Go HTTP server, client-go with elevated permissions
 - Container Orchestration: K3s (lightweight Kubernetes)
-- Authentication: Kubernetes RBAC + ServiceAccount tokens
-- Registration: Go HTTP service for self-service user onboarding
+- Authentication: Kubernetes RBAC + ServiceAccount tokens (5-year expiration)
 - CI/CD: GitHub Actions
 - Container Registry: Docker Hub
+
+> **📚 For detailed code structure and package responsibilities, see [Code Structure & Architecture](#code-structure--architecture) section below.**
 
 ## Project Scope
 
@@ -37,6 +40,212 @@ Self-service Minecraft server hosting platform where users can create, manage, a
 **Concurrent servers:** 2-3 running simultaneously (strict memory limits applied)
 **Total servers:** Up to 15 (most stopped to save resources)
 **Monthly cost:** ~$73 (single t3.large EC2 instance with 100GB storage)
+
+---
+
+## Code Structure & Architecture
+
+### Go Project Layout (Monorepo)
+
+The project uses a **single Go module** with multiple binaries:
+
+```
+kubecraft/                                    # Repository root
+│
+├── go.mod                                    # Single module: github.com/baighasan/kubecraft
+├── go.sum                                    # Dependency checksums
+│
+├── cmd/                                      # Binary entrypoints
+│   ├── kubecraft/                            # CLI tool (Phase 3)
+│   │   └── main.go                           # User-facing CLI
+│   │
+│   └── registration-server/                  # Registration service (Phase 2.5)
+│       └── main.go                           # HTTP server for self-service registration
+│
+├── pkg/                                      # Shared libraries
+│   ├── k8s/                                  # Kubernetes API wrapper (shared)
+│   │   ├── client.go                         # Initialize K8s clientset
+│   │   ├── namespace.go                      # Namespace operations
+│   │   ├── rbac.go                           # Create ServiceAccounts, Roles, RoleBindings
+│   │   ├── token.go                          # Generate ServiceAccount tokens
+│   │   └── server.go                         # StatefulSet/Service operations (for CLI)
+│   │
+│   ├── registration/                         # Registration business logic
+│   │   ├── handler.go                        # HTTP /register endpoint
+│   │   ├── validator.go                      # Username validation
+│   │   └── token_generator.go                # Token generation wrapper
+│   │
+│   └── config/                               # Shared configuration
+│       ├── config.go                         # ~/.kubecraft/config file I/O
+│       └── constants.go                      # Cluster endpoint, MAX_USERS, ports
+│
+├── manifests/                                # Kubernetes YAML templates
+│   ├── user-templates/                       # Per-user resources
+│   ├── server-templates/                     # Minecraft server manifests
+│   ├── registration-templates/               # Registration service deployment
+│   └── system-templates/                     # Cluster-wide RBAC
+│
+├── docker/                                   # Container images
+│   ├── Dockerfile                            # Minecraft server image
+│   └── start.sh                              # Minecraft startup script
+│
+├── terraform/                                # AWS infrastructure as code
+│   ├── main.tf
+│   ├── compute.tf
+│   ├── security.tf
+│   └── variables.tf
+│
+├── scripts/                                  # Admin helper scripts
+│   └── delete-user.sh                        # Manual user cleanup
+│
+└── .github/workflows/                        # CI/CD pipelines
+    ├── minecraft-image.yml
+    ├── registration-image.yml
+    └── cli-release.yml
+```
+
+### Package Responsibilities
+
+**`cmd/kubecraft/`** - CLI Tool (Phase 3)
+- **Purpose:** User-facing command-line interface
+- **Used by:** End users on their local computers
+- **Talks to:** Kubernetes API directly (using tokens from registration)
+- **Commands:** `register`, `server create`, `server list`, `server stop`, `server delete`
+- **Dependencies:** Imports `pkg/k8s`, `pkg/config`
+
+**`cmd/registration-server/`** - Registration Service (Phase 2.5)
+- **Purpose:** HTTP server for self-service user onboarding
+- **Used by:** CLI's `register` command (one-time interaction)
+- **Runs on:** EC2 instance as a pod in `kubecraft-system` namespace
+- **Exposes:** NodePort 30099 for HTTP endpoint
+- **Permissions:** Elevated (ClusterRole) to create namespaces and RBAC
+- **Dependencies:** Imports `pkg/k8s`, `pkg/registration`, `pkg/config`
+
+**`pkg/k8s/`** - Kubernetes Operations (Shared Library)
+- **Purpose:** Wrapper around client-go for common K8s operations
+- **Used by:** Both CLI and registration service
+- **Provides:**
+  - `client.go` - Initialize Kubernetes clientset (InClusterConfig or kubeconfig)
+  - `namespace.go` - Create/check namespaces, count users
+  - `rbac.go` - Create ServiceAccounts, Roles, RoleBindings, patch ClusterRoleBindings
+  - `token.go` - Generate ServiceAccount tokens via TokenRequest API
+  - `server.go` - Create/delete StatefulSets, allocate NodePorts, check capacity
+
+**`pkg/registration/`** - Registration Business Logic
+- **Purpose:** HTTP endpoint handling and validation
+- **Used by:** Registration service only
+- **Provides:**
+  - `handler.go` - Parse HTTP requests, orchestrate registration flow, return JSON
+  - `validator.go` - Username format validation, reserved name checks
+  - `token_generator.go` - High-level token generation wrapper
+
+**`pkg/config/`** - Shared Configuration
+- **Purpose:** Constants and configuration file management
+- **Used by:** Both CLI and registration service
+- **Provides:**
+  - `constants.go` - MAX_USERS (15), cluster endpoint, NodePort range (30000-30015)
+  - `config.go` - Read/write `~/.kubecraft/config` (CLI only)
+
+### Import Path Structure
+
+All packages import using the module path:
+
+```go
+// In cmd/registration-server/main.go
+package main
+
+import (
+    "github.com/baighasan/kubecraft/pkg/k8s"
+    "github.com/baighasan/kubecraft/pkg/registration"
+    "github.com/baighasan/kubecraft/pkg/config"
+)
+
+// In cmd/kubecraft/main.go
+package main
+
+import (
+    "github.com/baighasan/kubecraft/pkg/k8s"
+    "github.com/baighasan/kubecraft/pkg/config"
+    // Note: CLI doesn't need pkg/registration
+)
+
+// In pkg/registration/handler.go
+package registration
+
+import (
+    "github.com/baighasan/kubecraft/pkg/k8s"
+    "github.com/baighasan/kubecraft/pkg/config"
+)
+```
+
+### Build Commands
+
+```bash
+# Build CLI tool
+go build -o bin/kubecraft ./cmd/kubecraft
+
+# Build registration service
+go build -o bin/registration-server ./cmd/registration-server
+
+# Run locally (development)
+go run ./cmd/kubecraft register --username alice
+go run ./cmd/registration-server
+
+# Add/update dependencies
+go mod tidy
+```
+
+### Data Flow Architecture
+
+**Registration Flow (One-Time):**
+```
+User's Computer                    EC2 Instance (Kubernetes Cluster)
+┌─────────────┐                   ┌──────────────────────────────────┐
+│   kubecraft │ ──HTTP POST──────>│  Registration Service (Pod)      │
+│   CLI       │   (port 30099)    │  - Validates username            │
+│             │                   │  - Creates namespace             │
+│             │                   │  - Creates RBAC resources        │
+│             │                   │  - Generates SA token            │
+│             │ <──JSON Response──│  - Returns token                 │
+│             │   {token: "..."}  └──────────────────────────────────┘
+│             │                              │
+│   Saves to  │                              ▼
+│  ~/.kubecraft/config                  Kubernetes API
+└─────────────┘                         (creates resources)
+```
+
+**Server Operations Flow (Ongoing):**
+```
+User's Computer                    EC2 Instance (Kubernetes Cluster)
+┌─────────────┐                   ┌──────────────────────────────────┐
+│   kubecraft │                   │                                  │
+│   CLI       │ ──────────────────│──> Registration Service         │
+│             │  (NOT involved)   │     (bypassed)                   │
+│             │                   └──────────────────────────────────┘
+│  Reads token│
+│  from config│                   ┌──────────────────────────────────┐
+│             │ ──K8s API Call───>│  Kubernetes API Server           │
+│             │  (uses token)     │  - Authenticates token           │
+│             │                   │  - Checks RBAC permissions       │
+│             │ <──Response───────│  - Creates/manages resources     │
+└─────────────┘                   └──────────────────────────────────┘
+```
+
+### Authentication Model
+
+**Registration Service:** Uses ServiceAccount with ClusterRole permissions
+```yaml
+# Runs as: system:serviceaccount:kubecraft-system:registration-service
+# Permissions: Create namespaces, RBAC resources, generate tokens
+```
+
+**CLI Tool:** Uses user's ServiceAccount token (stored in ~/.kubecraft/config)
+```yaml
+# Authenticates as: system:serviceaccount:mc-{username}:{username}
+# Permissions: Limited to user's namespace (create servers, manage their resources)
+```
+
+**Key Insight:** Registration service is a **trusted system component** with elevated permissions. Users never get these permissions - they only get namespace-scoped access.
 
 ---
 
@@ -472,14 +681,68 @@ Standard structure as previously defined, ensuring Volume mount points align wit
 - Input validation
 - Idempotency (handling duplicate registrations)
 
+### Implementation Roadmap
+
+**Files to Implement (in order):**
+
+1. **`pkg/config/constants.go`** - Define constants
+   - MAX_USERS = 15
+   - REGISTRATION_PORT = 8080
+   - NODEPORT_MIN = 30000, NODEPORT_MAX = 30015
+   - Reserved usernames list
+
+2. **`pkg/k8s/client.go`** - Kubernetes client initialization
+   - `NewClient()` - Create clientset with InClusterConfig
+   - Error handling for API server connection
+
+3. **`pkg/k8s/namespace.go`** - Namespace operations
+   - `CreateNamespace(username)` - Create mc-{username} with labels
+   - `NamespaceExists(username)` - Check if already exists
+   - `CountUserNamespaces()` - Count namespaces for user limit check
+
+4. **`pkg/k8s/rbac.go`** - RBAC resource creation
+   - `CreateServiceAccount(namespace, username)` - Create SA
+   - `CreateRole(namespace)` - Create minecraft-manager Role
+   - `CreateRoleBinding(namespace, username)` - Bind SA to Role
+   - `UpdateClusterRoleBinding(username, namespace)` - Add user to capacity checker
+   - `CreateResourceQuota(namespace)` - Apply compute limits
+
+5. **`pkg/k8s/token.go`** - Token generation
+   - `GenerateToken(namespace, serviceAccountName)` - Use TokenRequest API
+   - Set 5-year expiration (157680000 seconds)
+
+6. **`pkg/registration/validator.go`** - Username validation
+   - `ValidateUsername(username)` - Check format (alphanumeric, 3-16 chars)
+   - Check against reserved names (system, admin, root, etc.)
+   - Return descriptive errors
+
+7. **`pkg/registration/handler.go`** - HTTP endpoint
+   - `RegisterHandler(w http.ResponseWriter, r *http.Request)` - Main handler
+   - Parse JSON request body
+   - Orchestrate registration flow (validate → check limit → create resources → generate token)
+   - Return JSON response with token
+
+8. **`cmd/registration-server/main.go`** - HTTP server
+   - Set up HTTP routes (`/register`, `/health`)
+   - Start server on port 8080
+   - Graceful shutdown handling
+
+9. **Docker image** - Build and test
+   - Multi-stage Dockerfile for registration service
+   - Test locally, push to Docker Hub
+
 ### Deliverables
-- [ ] Registration service implementation (`cmd/registration-server/`, `pkg/registration/`)
-- [ ] Dockerfile for registration service
-- [ ] Service can create all user resources (namespace, RBAC, etc.)
-- [ ] Service generates valid ServiceAccount tokens
-- [ ] Username validation (format, uniqueness, reserved names)
+- [ ] All `pkg/k8s/` files implemented (client, namespace, rbac, token)
+- [ ] All `pkg/registration/` files implemented (validator, handler)
+- [ ] All `pkg/config/` files implemented (constants)
+- [ ] `cmd/registration-server/main.go` HTTP server running
+- [ ] Dockerfile for registration service created
+- [ ] Service can create all user resources (namespace, RBAC, ResourceQuota)
+- [ ] Service generates valid ServiceAccount tokens (5-year expiration)
+- [ ] Username validation working (format, uniqueness, reserved names)
 - [ ] User limit enforcement (max 15 users)
 - [ ] Tested locally with curl and in k3d cluster
+- [ ] RBAC isolation verified (users can't access each other's namespaces)
 - [ ] Image pushed to Docker Hub
 
 ---
@@ -493,20 +756,18 @@ Standard structure as previously defined, ensuring Volume mount points align wit
 - Implement Polling Logic for NodePort retrieval
 - Embed cluster endpoint in CLI binary
 
-### Project Structure
+### Implementation Notes
 
-```
-cmd/cli/
-  main.go           # CLI entrypoint
-  config.go         # Hardcoded cluster endpoint constants
-  register.go       # Self-service registration command
-  server.go         # Server management commands (create, list, stop, delete)
+**Files to Implement:**
+- **`cmd/kubecraft/main.go`** - CLI entrypoint with Cobra commands
+- **`pkg/k8s/server.go`** - Server management operations (create, delete, list, capacity checks, NodePort allocation)
+- **`pkg/config/config.go`** - Read/write `~/.kubecraft/config` file
+- **`pkg/config/constants.go`** - Update with cluster endpoint (shared with registration service)
 
-pkg/k8s/
-  client.go         # Kubernetes client wrapper
-  server.go         # Server operations (create, delete, capacity checks)
-  auth.go           # Token and kubeconfig management
-```
+**Reuses from Phase 2.5:**
+- `pkg/k8s/client.go` - Already implemented for registration service
+- `pkg/k8s/namespace.go` - For capacity checks (counting namespaces)
+- `pkg/config/constants.go` - Shared constants
 
 ### Authentication Architecture
 
