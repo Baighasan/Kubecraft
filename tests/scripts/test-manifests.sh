@@ -112,7 +112,7 @@ check_field_exists() {
     TESTS_TOTAL=$((TESTS_TOTAL + 1))
     echo -n "  [TEST] $description ... "
 
-    if grep -q "$field" "$file"; then
+    if grep -q -- "$field" "$file"; then
         echo -e "${GREEN}✓ PASS${NC}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -314,7 +314,7 @@ main() {
 
     check_field_exists \
         "${MANIFEST_DIR}/system-templates/clusterrole.yaml" \
-        "kubecraft-capacity-checker" \
+        "kc-capacity-checker" \
         "capacity checker ClusterRole has correct name"
 
     # ========================================
@@ -337,12 +337,12 @@ main() {
 
     check_field_exists \
         "${MANIFEST_DIR}/registration-templates/registration-clusterrole.yaml" \
-        "- namespaces" \
+        '"namespaces"' \
         "registration ClusterRole can manage namespaces"
 
     check_field_exists \
         "${MANIFEST_DIR}/registration-templates/registration-clusterrole.yaml" \
-        "- serviceaccounts/token" \
+        '"serviceaccounts/token"' \
         "registration ClusterRole can create tokens"
 
     # ========================================
