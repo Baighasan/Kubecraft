@@ -7,8 +7,8 @@ set -euo pipefail
 
 # Get script directory for relative paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HELPER_SCRIPT_DIR="${SCRIPT_DIR}/../../scripts"
-MANIFEST_DIR="${SCRIPT_DIR}/../../manifests"
+HELPER_SCRIPT_DIR="${SCRIPT_DIR}"
+MANIFEST_DIR="${SCRIPT_DIR}/../manifests"
 
 # Colors for output
 GREEN='\033[0;32m'

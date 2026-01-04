@@ -1,0 +1,145 @@
+name: Packages Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/test-packages.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run unit tests
+        run: |
+          go test -v -race -coverprofile=coverage-unit.out ./pkg/config/...
+
+      - name: Display coverage
+        run: |
+          go tool cover -func=coverage-unit.out
+
+      - name: Upload unit test coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage-unit.out
+          flags: unittests
+          name: unit-tests
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Create k3d cluster
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: "go-test-cluster"
+          args: >-
+            --agents 1
+            --no-lb
+            --k3s-arg "--disable=traefik,servicelb,metrics-server@server:*"
+
+      - name: Wait for cluster to be ready
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=60s
+          kubectl get nodes
+
+      - name: Create system RBAC (required for tests)
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: kubecraft-capacity-checker
+            labels:
+              app: kubecraft
+          rules:
+            - apiGroups: [""]
+              resources: ["namespaces", "services", "pods"]
+              verbs: ["get", "list"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: kc-users-capacity-check
+            labels:
+              app: kubecraft
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: kubecraft-capacity-checker
+          subjects: []
+          EOF
+
+      - name: Verify cluster is accessible
+        run: |
+          kubectl cluster-info
+          kubectl get clusterrole kubecraft-capacity-checker
+
+      - name: Run integration tests
+        run: |
+          go test -v -race -coverprofile=coverage-integration.out ./pkg/k8s/...
+
+      - name: Display coverage
+        run: |
+          go tool cover -func=coverage-integration.out
+
+      - name: Upload integration test coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage-integration.out
+          flags: integrationtests
+          name: integration-tests
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "Unit Tests: ${{ needs.unit-tests.result }}"
+          echo "Integration Tests: ${{ needs.integration-tests.result }}"
+
+          if [ "${{ needs.unit-tests.result }}" != "success" ] || [ "${{ needs.integration-tests.result }}" != "success" ]; then
+            echo "❌ Some tests failed"
+            exit 1
+          fi
+
+          echo "✅ All tests passed"

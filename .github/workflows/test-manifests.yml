@@ -5,13 +5,13 @@ on:
     branches: [main]
     paths:
       - 'manifests/**'
-      - 'tests/scripts/test-manifests.sh'
+      - 'scripts/test-manifests.sh'
       - '.github/workflows/test-manifests.yml'
   pull_request:
     branches: [main]
     paths:
       - 'manifests/**'
-      - 'tests/scripts/test-manifests.sh'
+      - 'scripts/test-manifests.sh'
       - '.github/workflows/test-manifests.yml'
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
 
       - name: Run manifest validation tests
         run: |
-          ./tests/scripts/test-manifests.sh
+          ./scripts/test-manifests.sh
 
       - name: Display test results
         if: always()
@@ -81,7 +81,7 @@ jobs:
 
       - name: Run RBAC functional tests
         run: |
-          ./tests/scripts/test-rbac.sh
+          ./scripts/test-rbac.sh
 
       - name: Display test results
         if: always()

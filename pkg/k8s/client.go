@@ -50,3 +50,9 @@ func NewClientFromKubeConfig(kubeConfigPath string) (*Client, error) {
 		namespace: "",
 	}, nil
 }
+
+// GetClientset returns the underlying Kubernetes clientset
+// Primarily used for testing and advanced operations
+func (c *Client) GetClientset() *kubernetes.Clientset {
+	return c.clientset
+}
