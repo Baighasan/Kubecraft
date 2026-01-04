@@ -1,0 +1,90 @@
+name: Manifest Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'manifests/**'
+      - 'tests/scripts/test-manifests.sh'
+      - '.github/workflows/test-manifests.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'manifests/**'
+      - 'tests/scripts/test-manifests.sh'
+      - '.github/workflows/test-manifests.yml'
+
+jobs:
+  validate-manifests:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.28.0'
+
+      - name: Create k3d cluster
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: "manifest-test-cluster"
+          args: >-
+            --agents 1
+            --no-lb
+            --k3s-arg "--disable=traefik,servicelb,metrics-server@server:*"
+
+      - name: Wait for cluster to be ready
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=60s
+          kubectl get nodes
+
+      - name: Run manifest validation tests
+        run: |
+          ./tests/scripts/test-manifests.sh
+
+      - name: Display test results
+        if: always()
+        run: |
+          echo "Manifest validation completed"
+          echo "Check test output above for details"
+
+  validate-rbac:
+    name: Validate RBAC Configuration
+    runs-on: ubuntu-latest
+    needs: validate-manifests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.28.0'
+
+      - name: Create k3d cluster
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: "rbac-test-cluster"
+          args: >-
+            --agents 1
+            --no-lb
+            --k3s-arg "--disable=traefik,servicelb,metrics-server@server:*"
+
+      - name: Wait for cluster to be ready
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=60s
+
+      - name: Run RBAC functional tests
+        run: |
+          ./tests/scripts/test-rbac.sh
+
+      - name: Display test results
+        if: always()
+        run: |
+          echo "RBAC validation completed"
+          echo "Check test output above for details"

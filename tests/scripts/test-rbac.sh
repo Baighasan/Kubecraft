@@ -7,7 +7,8 @@ set -euo pipefail
 
 # Get script directory for relative paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MANIFEST_DIR="${SCRIPT_DIR}/../manifests"
+HELPER_SCRIPT_DIR="${SCRIPT_DIR}/../../scripts"
+MANIFEST_DIR="${SCRIPT_DIR}/../../manifests"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -67,8 +68,8 @@ cleanup() {
     print_header "Cleaning Up Test Resources"
 
     echo "Deleting test users and namespaces..."
-    "${SCRIPT_DIR}/delete-user.sh" "$USER1" 2>/dev/null || echo "  $USER1 already deleted or doesn't exist"
-    "${SCRIPT_DIR}/delete-user.sh" "$USER2" 2>/dev/null || echo "  $USER2 already deleted or doesn't exist"
+    "${HELPER_SCRIPT_DIR}/delete-user.sh" "$USER1" 2>/dev/null || echo "  $USER1 already deleted or doesn't exist"
+    "${HELPER_SCRIPT_DIR}/delete-user.sh" "$USER2" 2>/dev/null || echo "  $USER2 already deleted or doesn't exist"
 
     echo -e "${GREEN}Cleanup complete${NC}"
 }
@@ -94,7 +95,7 @@ main() {
     print_header "Phase 1: Setup"
 
     print_section "Applying System RBAC"
-    if "${SCRIPT_DIR}/apply-system-rbac.sh"; then
+    if "${HELPER_SCRIPT_DIR}/apply-system-rbac.sh"; then
         echo -e "${GREEN}✓ System RBAC applied${NC}"
     else
         echo -e "${RED}✗ Failed to apply system RBAC${NC}"
@@ -103,7 +104,7 @@ main() {
 
     print_section "Creating Test Users"
     echo "Creating user: $USER1"
-    if "${SCRIPT_DIR}/create-user.sh" "$USER1"; then
+    if "${HELPER_SCRIPT_DIR}/create-user.sh" "$USER1"; then
         echo -e "${GREEN}✓ User $USER1 created${NC}"
     else
         echo -e "${RED}✗ Failed to create user $USER1${NC}"
@@ -112,7 +113,7 @@ main() {
 
     echo ""
     echo "Creating user: $USER2"
-    if "${SCRIPT_DIR}/create-user.sh" "$USER2"; then
+    if "${HELPER_SCRIPT_DIR}/create-user.sh" "$USER2"; then
         echo -e "${GREEN}✓ User $USER2 created${NC}"
     else
         echo -e "${RED}✗ Failed to create user $USER2${NC}"
