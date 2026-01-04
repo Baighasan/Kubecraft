@@ -6,12 +6,14 @@ on:
     paths:
       - 'manifests/**'
       - 'scripts/test-manifests.sh'
+      - 'scripts/test-rbac.sh'
       - '.github/workflows/test-manifests.yml'
   pull_request:
     branches: [main]
     paths:
       - 'manifests/**'
       - 'scripts/test-manifests.sh'
+      - 'scripts/test-rbac.sh'
       - '.github/workflows/test-manifests.yml'
 
 jobs:
