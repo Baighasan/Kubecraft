@@ -587,20 +587,17 @@ go test -v -race ./pkg/...
 
 Tests run automatically in GitHub Actions:
 
-**Workflows:**
-- `.github/workflows/test-packages.yml` - config + k8s tests
-- `.github/workflows/test-registration.yml` - registration service tests
+**Workflow:** `.github/workflows/test-packages.yml`
 
 **Triggers:**
 - Push to `main` branch
 - Pull requests to `main`
-- Changes to `pkg/**`, `cmd/**`, `go.mod`, `go.sum`
+- Changes to `pkg/**`, `cmd/registration-server/**`, `go.mod`, `go.sum`
 
 **Jobs:**
-1. **unit-tests** - Constants + validator tests (fast)
+1. **unit-tests** - Constants + validator tests (fast, no cluster)
 2. **integration-tests** - k8s + handler tests in k3d cluster
-3. **registration-server-build** - Verifies binary builds
-4. **test-summary** - Reports overall status
+3. **test-summary** - Reports overall status
 
 ## Common Issues & Troubleshooting
 

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'pkg/**'
+      - 'cmd/registration-server/**'
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/test-packages.yml'
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - 'pkg/**'
+      - 'cmd/registration-server/**'
       - 'go.mod'
       - 'go.sum'
 
@@ -34,7 +36,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          go test -v -race -coverprofile=coverage-unit.out ./pkg/config/...
+          go test -v -race -coverprofile=coverage-unit.out ./pkg/config/... ./pkg/registration/... -run "TestConstants|TestValidateUsername"
 
       - name: Display coverage
         run: |
@@ -112,7 +114,7 @@ jobs:
 
       - name: Run integration tests
         run: |
-          go test -v -race -coverprofile=coverage-integration.out ./pkg/k8s/...
+          go test -v -race -coverprofile=coverage-integration.out ./pkg/k8s/... ./pkg/registration/... -run "Test[^V]"
 
       - name: Display coverage
         run: |
