@@ -1,0 +1,59 @@
+# Git
+.git/
+.gitignore
+.github/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Go test files (not needed in images)
+*_test.go
+**/*_test.go
+coverage*.out
+*.test
+
+# Documentation
+*.md
+CLAUDE.md
+TESTING.md
+docs/
+
+# Build artifacts
+bin/
+*.out
+
+# Kubernetes manifests (not needed in container images)
+manifests/
+*.yaml
+*.yml
+!docker/**/*.yml
+
+# Scripts (not needed in images)
+scripts/
+
+# Terraform
+terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.terraform/
+
+# Environment files
+.env
+.env.*
+*.env
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp

@@ -1,0 +1,47 @@
+name: Build Registration Service Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/registration/**'
+      - 'cmd/registration-server/**'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/registration-image.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker/registration/**'
+      - 'cmd/registration-server/**'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/registration-image.yml'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  build:
+    name: Build Registration Service Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/registration/Dockerfile
+          push: false
+          tags: hasanbaig786/kubecraft-registration:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build complete
+        run: echo "✅ Registration service image built successfully (not pushed)"

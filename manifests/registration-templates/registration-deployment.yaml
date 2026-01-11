@@ -21,7 +21,8 @@ spec:
       serviceAccountName: registration-service
       containers:
       - name: registration
-        image: dockerhub/kubecraft-registration:latest  # placeholder
+        image: hasanbaig786/kubecraft-registration:latest
+        imagePullPolicy: Never
         ports:
         - containerPort: 8080
         env:

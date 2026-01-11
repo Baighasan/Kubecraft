@@ -18,7 +18,7 @@ ENV VERSION=1.21.11 \
   JAVA_MEMORY=768M
 
 # Copy startup script
-COPY start.sh /start.sh
+COPY docker/minecraft/start.sh /start.sh
 RUN chmod +x /start.sh
 
 # Change ownership of /data to minecraft user
