@@ -38,7 +38,7 @@ func getTestClient(t *testing.T) *k8s.Client {
 
 // uniqueUsername generates a unique username for tests
 func uniqueUsername() string {
-	return fmt.Sprintf("testuser-%d", time.Now().UnixNano()%1000000)
+	return fmt.Sprintf("testuser%d", time.Now().UnixNano()%1000000)
 }
 
 // cleanupNamespace deletes a namespace and all resources inside it
