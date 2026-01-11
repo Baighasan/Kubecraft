@@ -315,7 +315,7 @@ Current test coverage:
 - [ ] Add kubeconform for strict schema validation
 - [ ] Add performance tests (server startup time)
 - [ ] Add load tests (multiple concurrent users)
-- [ ] Add integration tests for registration service (Phase 2.5+)
+- [x] Add integration tests for registration service (Phase 2.5) ✅
 - [ ] Add CLI tests (Phase 3+)
 
 ## Questions?
@@ -340,17 +340,19 @@ This section covers the Go tests for the `pkg/` packages (Phase 2.5 code).
 ## Go Test Structure
 
 ```
-tests/
-└── pkg/                      # Go tests (mirrors pkg/ structure)
-    ├── config/
-    │   └── constants_test.go      # Unit tests for constants
-    └── k8s/
-        ├── client_test.go          # Client initialization tests
-        ├── namespace_test.go       # Namespace operation tests
-        ├── rbac_test.go            # RBAC creation tests
-        ├── token_test.go           # Token generation tests
-        └── testutil/
-            └── helpers.go          # Shared test utilities
+pkg/
+├── config/
+│   └── constants_test.go      # Unit tests for constants
+├── k8s/
+│   ├── client_test.go          # Client initialization tests
+│   ├── namespace_test.go       # Namespace operation tests
+│   ├── rbac_test.go            # RBAC creation tests
+│   ├── token_test.go           # Token generation tests
+│   └── helpers_test.go         # Shared test utilities
+└── registration/
+    ├── validator_test.go       # Username validation tests
+    ├── handler_test.go         # HTTP handler integration tests
+    └── helpers_test.go         # Test helpers
 ```
 
 ## Quick Start
@@ -519,6 +521,48 @@ go test -v ./pkg/k8s -run TestGenerateToken
 
 ---
 
+### **validator_test.go** (Unit Tests)
+
+Tests username validation logic:
+
+- `TestValidateUsername_Success` - Valid usernames (6 cases)
+- `TestValidateUsername_TooShort` - Rejects short usernames (3 cases)
+- `TestValidateUsername_TooLong` - Rejects long usernames
+- `TestValidateUsername_InvalidCharacters` - Rejects special chars (9 cases)
+- `TestValidateUsername_MustStartWithLetter` - Rejects number-prefix (4 cases)
+- `TestValidateUsername_ReservedNames` - Rejects reserved names (5 cases)
+- `TestValidateUsername_EdgeCases` - Boundary tests (5 cases)
+
+**Example:**
+```bash
+go test -v ./pkg/registration -run TestValidateUsername
+```
+
+**Duration:** < 1 second
+
+---
+
+### **handler_test.go** (Integration Tests)
+
+Tests registration HTTP handler:
+
+- `TestHandler_MethodNotAllowed` - Rejects non-POST requests
+- `TestHandler_InvalidJSON` - Handles malformed JSON
+- `TestHandler_InvalidUsername` - Integrates with validator
+- `TestHandler_SuccessfulRegistration` - Creates all resources
+- `TestHandler_DuplicateUsername` - Prevents duplicates
+- `TestHandler_ResponseFormat` - Verifies JSON responses
+- `TestHandler_CreatesAllResources` - Verifies namespace, RBAC, quota
+
+**Example:**
+```bash
+go test -v ./pkg/registration -run TestHandler
+```
+
+**Duration:** ~30-60 seconds (requires cluster + RBAC)
+
+---
+
 ## Running with Coverage
 
 ```bash
@@ -543,17 +587,20 @@ go test -v -race ./pkg/...
 
 Tests run automatically in GitHub Actions:
 
-**Workflow:** `.github/workflows/test-go.yml`
+**Workflows:**
+- `.github/workflows/test-packages.yml` - config + k8s tests
+- `.github/workflows/test-registration.yml` - registration service tests
 
 **Triggers:**
 - Push to `main` branch
 - Pull requests to `main`
-- Changes to `pkg/**`, `pkg/**`, `go.mod`, `go.sum`
+- Changes to `pkg/**`, `cmd/**`, `go.mod`, `go.sum`
 
 **Jobs:**
-1. **unit-tests** - Runs constant tests (fast)
-2. **integration-tests** - Runs k8s tests in k3d cluster
-3. **test-summary** - Reports overall status
+1. **unit-tests** - Constants + validator tests (fast)
+2. **integration-tests** - k8s + handler tests in k3d cluster
+3. **registration-server-build** - Verifies binary builds
+4. **test-summary** - Reports overall status
 
 ## Common Issues & Troubleshooting
 
@@ -659,20 +706,21 @@ func TestMyFeature(t *testing.T) {
 |---------|-----------------|--------|--------|
 | `pkg/config` | ~95% | 90% | ✅ Excellent |
 | `pkg/k8s` | ~70% | 70% | ✅ Good |
-| **Overall** | ~75% | 70% | ✅ Meeting goals |
+| `pkg/registration` | ~85% | 80% | ✅ Excellent |
+| **Overall** | ~80% | 70% | ✅ Meeting goals |
 
 ---
 
 ## Next Steps
 
 - [ ] Add tests for Phase 3 (CLI tool)
-- [ ] Add tests for Phase 2.5+ (registration service)
+- [x] Add tests for Phase 2.5 (registration service) ✅
 - [ ] Add performance benchmarks
 - [ ] Add load tests (multiple concurrent users)
 
 ---
 
-**Last updated:** 2026-01-04  
-**Test files:** 5 files, ~800 lines of test code  
-**Total tests:** ~30 test functions
+**Last updated:** 2026-01-10
+**Test files:** 8 files, ~1400 lines of test code
+**Total tests:** ~50 test functions
 

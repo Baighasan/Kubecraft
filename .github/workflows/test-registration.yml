@@ -1,0 +1,181 @@
+name: Registration Service Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pkg/registration/**'
+      - 'cmd/registration-server/**'
+      - 'pkg/k8s/**'
+      - 'pkg/config/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/test-registration.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'pkg/registration/**'
+      - 'cmd/registration-server/**'
+      - 'pkg/k8s/**'
+      - 'pkg/config/**'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  validator-tests:
+    name: Validator Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run validator tests
+        run: |
+          go test -v -race -coverprofile=coverage-validator.out ./pkg/registration/... -run TestValidateUsername
+
+      - name: Display validator coverage
+        run: |
+          go tool cover -func=coverage-validator.out
+
+      - name: Upload validator test coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage-validator.out
+          flags: validator
+          name: validator-tests
+
+  handler-integration-tests:
+    name: Handler Integration Tests
+    runs-on: ubuntu-latest
+    needs: validator-tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Create k3d cluster
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: "registration-test-cluster"
+          args: >-
+            --agents 1
+            --no-lb
+            --k3s-arg "--disable=traefik,servicelb,metrics-server@server:*"
+
+      - name: Wait for cluster to be ready
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=60s
+          kubectl get nodes
+
+      - name: Create system RBAC (required for registration tests)
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: kubecraft-capacity-checker
+            labels:
+              app: kubecraft
+          rules:
+            - apiGroups: [""]
+              resources: ["namespaces", "services", "pods"]
+              verbs: ["get", "list"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: kc-users-capacity-check
+            labels:
+              app: kubecraft
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: kubecraft-capacity-checker
+          subjects: []
+          EOF
+
+      - name: Verify cluster setup
+        run: |
+          kubectl cluster-info
+          kubectl get clusterrole kubecraft-capacity-checker
+          kubectl get clusterrolebinding kc-users-capacity-check
+
+      - name: Run handler integration tests
+        run: |
+          go test -v -race -coverprofile=coverage-handler.out ./pkg/registration/... -run TestHandler
+
+      - name: Display handler coverage
+        run: |
+          go tool cover -func=coverage-handler.out
+
+      - name: Upload handler test coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage-handler.out
+          flags: handler
+          name: handler-integration-tests
+
+  registration-server-build:
+    name: Registration Server Build Test
+    runs-on: ubuntu-latest
+    needs: [validator-tests, handler-integration-tests]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build registration server binary
+        run: |
+          go build -v -o bin/registration-server ./cmd/registration-server
+
+      - name: Verify binary exists
+        run: |
+          ls -lh bin/registration-server
+          file bin/registration-server
+
+  test-summary:
+    name: Registration Tests Summary
+    runs-on: ubuntu-latest
+    needs: [validator-tests, handler-integration-tests, registration-server-build]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "Validator Tests: ${{ needs.validator-tests.result }}"
+          echo "Handler Integration Tests: ${{ needs.handler-integration-tests.result }}"
+          echo "Registration Server Build: ${{ needs.registration-server-build.result }}"
+
+          if [ "${{ needs.validator-tests.result }}" != "success" ] || \
+             [ "${{ needs.handler-integration-tests.result }}" != "success" ] || \
+             [ "${{ needs.registration-server-build.result }}" != "success" ]; then
+            echo "❌ Some tests failed"
+            exit 1
+          fi
+
+          echo "✅ All registration tests passed"
