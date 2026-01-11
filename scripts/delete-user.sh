@@ -52,11 +52,19 @@ done <<< "$SUBJECTS"
 if [ "$SUBJECT_INDEX" -eq -1 ]; then
     echo -e "${YELLOW}WARNING: User '${USERNAME}' not found in ClusterRoleBinding (already removed or never added)${NC}"
 else
-    kubectl patch clusterrolebinding kc-users-capacity-check --type='json' -p="[
+    echo -e "${YELLOW}Removing user from ClusterRoleBinding...${NC}"
+    if kubectl patch clusterrolebinding kc-users-capacity-check --type='json' -p="[
       {
         \"op\": \"remove\",
         \"path\": \"/subjects/${SUBJECT_INDEX}\"
       }
-    ]"
-    echo -e "${GREEN}✓ Removed user from ClusterRoleBinding${NC}"
+    ]"; then
+        echo -e "${GREEN}✓ Removed user from ClusterRoleBinding${NC}"
+    else
+        echo -e "${RED}ERROR: Failed to remove user from ClusterRoleBinding${NC}"
+        exit 1
+    fi
 fi
+
+echo ""
+echo -e "${GREEN}✅ User '${USERNAME}' has been completely deleted${NC}"
