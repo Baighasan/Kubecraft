@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/baighasan/kubecraft/pkg/config"
-	"github.com/baighasan/kubecraft/pkg/k8s"
+	"github.com/baighasan/kubecraft/internal/config"
+	"github.com/baighasan/kubecraft/internal/k8s"
 )
 
 // RegisterRequest represents the incoming JSON from the CLI

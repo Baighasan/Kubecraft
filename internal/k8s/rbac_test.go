@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/baighasan/kubecraft/pkg/config"
+	"github.com/baighasan/kubecraft/internal/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

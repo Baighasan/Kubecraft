@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/baighasan/kubecraft/pkg/config"
+	"github.com/baighasan/kubecraft/internal/config"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

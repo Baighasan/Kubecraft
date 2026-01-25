@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/baighasan/kubecraft/pkg/config"
+	"github.com/baighasan/kubecraft/internal/config"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"

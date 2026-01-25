@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/baighasan/kubecraft/pkg/k8s"
-	"github.com/baighasan/kubecraft/pkg/registration"
+	"github.com/baighasan/kubecraft/internal/k8s"
+	"github.com/baighasan/kubecraft/internal/registration"
 	"k8s.io/client-go/util/homedir"
 )
 

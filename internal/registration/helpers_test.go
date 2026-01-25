@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/baighasan/kubecraft/pkg/config"
-	"github.com/baighasan/kubecraft/pkg/k8s"
+	"github.com/baighasan/kubecraft/internal/config"
+	"github.com/baighasan/kubecraft/internal/k8s"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

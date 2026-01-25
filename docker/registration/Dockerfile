@@ -16,7 +16,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -a -installsuffix cgo \
     -ldflags '-s -w -extldflags "-static"' \
     -o registration-server \
-    ./src/registration-server
+    ./cmd/registration-server
 
 
 # Stage 2: Create minimal image runtime

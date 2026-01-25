@@ -4,7 +4,7 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/baighasan/kubecraft/pkg/config"
+	"github.com/baighasan/kubecraft/internal/config"
 )
 
 func ValidateUsername(username string) error {

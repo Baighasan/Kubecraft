@@ -5,8 +5,8 @@ on:
     branches: [main]
     paths:
       - 'docker/registration/**'
-      - 'src/registration-server/**'
-      - 'pkg/**'
+      - 'cmd/registration-server/**'
+      - 'internal/**'
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/registration-image.yml'
@@ -14,8 +14,8 @@ on:
     branches: [main]
     paths:
       - 'docker/registration/**'
-      - 'src/registration-server/**'
-      - 'pkg/**'
+      - 'cmd/registration-server/**'
+      - 'internal/**'
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/registration-image.yml'

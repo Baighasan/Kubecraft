@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/baighasan/kubecraft/pkg/config"
+	"github.com/baighasan/kubecraft/internal/config"
 )
 
 func TestGenerateToken_Success(t *testing.T) {
