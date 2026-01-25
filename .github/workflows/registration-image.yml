@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'docker/registration/**'
-      - 'cmd/registration-server/**'
+      - 'src/registration-server/**'
       - 'pkg/**'
       - 'go.mod'
       - 'go.sum'
@@ -14,7 +14,7 @@ on:
     branches: [main]
     paths:
       - 'docker/registration/**'
-      - 'cmd/registration-server/**'
+      - 'src/registration-server/**'
       - 'pkg/**'
       - 'go.mod'
       - 'go.sum'
