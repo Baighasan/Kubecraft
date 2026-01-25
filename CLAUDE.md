@@ -62,7 +62,7 @@ kubecraft/                                    # Repository root
 │   └── registration-server/                  # Registration service (Phase 2.5)
 │       └── main.go                           # HTTP server for self-service registration
 │
-├── pkg/                                      # Shared libraries
+├── internal/                                 # Shared libraries (internal to this module)
 │   ├── k8s/                                  # Kubernetes API wrapper (shared)
 │   │   ├── client.go                         # Initialize K8s clientset
 │   │   ├── namespace.go                      # Namespace operations
@@ -72,12 +72,21 @@ kubecraft/                                    # Repository root
 │   │
 │   ├── registration/                         # Registration business logic
 │   │   ├── handler.go                        # HTTP /register endpoint
-│   │   ├── validator.go                      # Username validation
-│   │   └── token_generator.go                # Token generation wrapper
+│   │   └── validator.go                      # Username validation
 │   │
-│   └── config/                               # Shared configuration
-│       ├── config.go                         # ~/.kubecraft/config file I/O
-│       └── constants.go                      # Cluster endpoint, MAX_USERS, ports
+│   ├── config/                               # Shared configuration
+│   │   └── constants.go                      # Cluster endpoint, MAX_USERS, ports
+│   │
+│   └── cli/                                  # CLI command implementations
+│       ├── root.go                           # Root command and global flags
+│       ├── register.go                       # Register command
+│       └── server/                           # Server subcommands
+│           ├── server.go                     # Server command group
+│           ├── create.go                     # Server create command
+│           ├── list.go                       # Server list command
+│           ├── start.go                      # Server start command
+│           ├── stop.go                       # Server stop command
+│           └── delete.go                     # Server delete command
 │
 ├── manifests/                                # Kubernetes YAML templates
 │   ├── user-templates/                       # Per-user resources
@@ -107,11 +116,11 @@ kubecraft/                                    # Repository root
 ### Package Responsibilities
 
 **`cmd/kubecraft/`** - CLI Tool (Phase 3)
-- **Purpose:** User-facing command-line interface
+- **Purpose:** User-facing command-line interface entrypoint
 - **Used by:** End users on their local computers
 - **Talks to:** Kubernetes API directly (using tokens from registration)
-- **Commands:** `register`, `server create`, `server list`, `server stop`, `server delete`
-- **Dependencies:** Imports `pkg/k8s`, `pkg/config`
+- **Commands:** `register`, `server create`, `server list`, `server start`, `server stop`, `server delete`
+- **Dependencies:** Imports `internal/cli`, `internal/k8s`, `internal/config`
 
 **`cmd/registration-server/`** - Registration Service (Phase 2.5)
 - **Purpose:** HTTP server for self-service user onboarding
@@ -119,9 +128,9 @@ kubecraft/                                    # Repository root
 - **Runs on:** EC2 instance as a pod in `kubecraft-system` namespace
 - **Exposes:** NodePort 30099 for HTTP endpoint
 - **Permissions:** Elevated (ClusterRole) to create namespaces and RBAC
-- **Dependencies:** Imports `pkg/k8s`, `pkg/registration`, `pkg/config`
+- **Dependencies:** Imports `internal/k8s`, `internal/registration`, `internal/config`
 
-**`pkg/k8s/`** - Kubernetes Operations (Shared Library)
+**`internal/k8s/`** - Kubernetes Operations (Shared Library)
 - **Purpose:** Wrapper around client-go for common K8s operations
 - **Used by:** Both CLI and registration service
 - **Provides:**
@@ -131,20 +140,26 @@ kubecraft/                                    # Repository root
   - `token.go` - Generate ServiceAccount tokens via TokenRequest API
   - `server.go` - Create/delete StatefulSets, allocate NodePorts, check capacity
 
-**`pkg/registration/`** - Registration Business Logic
+**`internal/registration/`** - Registration Business Logic
 - **Purpose:** HTTP endpoint handling and validation
 - **Used by:** Registration service only
 - **Provides:**
   - `handler.go` - Parse HTTP requests, orchestrate registration flow, return JSON
   - `validator.go` - Username format validation, reserved name checks
-  - `token_generator.go` - High-level token generation wrapper
 
-**`pkg/config/`** - Shared Configuration
+**`internal/config/`** - Shared Configuration
 - **Purpose:** Constants and configuration file management
 - **Used by:** Both CLI and registration service
 - **Provides:**
   - `constants.go` - MAX_USERS (15), cluster endpoint, NodePort range (30000-30015)
-  - `config.go` - Read/write `~/.kubecraft/config` (CLI only)
+
+**`internal/cli/`** - CLI Command Implementations
+- **Purpose:** Cobra command implementations for the CLI tool
+- **Used by:** CLI entrypoint only
+- **Provides:**
+  - `root.go` - Root command setup, global flags, config loading
+  - `register.go` - User registration via HTTP to registration service
+  - `server/*.go` - Server management commands (create, list, start, stop, delete)
 
 ### Import Path Structure
 
@@ -155,26 +170,32 @@ All packages import using the module path:
 package main
 
 import (
-    "github.com/baighasan/kubecraft/pkg/k8s"
-    "github.com/baighasan/kubecraft/pkg/registration"
-    "github.com/baighasan/kubecraft/pkg/config"
+    "github.com/baighasan/kubecraft/internal/k8s"
+    "github.com/baighasan/kubecraft/internal/registration"
+    "github.com/baighasan/kubecraft/internal/config"
 )
 
 // In cmd/kubecraft/main.go
 package main
 
 import (
-    "github.com/baighasan/kubecraft/pkg/k8s"
-    "github.com/baighasan/kubecraft/pkg/config"
-    // Note: CLI doesn't need pkg/registration
+    "github.com/baighasan/kubecraft/internal/cli"
 )
 
-// In pkg/registration/handler.go
+// In internal/cli/root.go
+package cli
+
+import (
+    "github.com/baighasan/kubecraft/internal/k8s"
+    "github.com/baighasan/kubecraft/internal/config"
+)
+
+// In internal/registration/handler.go
 package registration
 
 import (
-    "github.com/baighasan/kubecraft/pkg/k8s"
-    "github.com/baighasan/kubecraft/pkg/config"
+    "github.com/baighasan/kubecraft/internal/k8s"
+    "github.com/baighasan/kubecraft/internal/config"
 )
 ```
 
@@ -524,38 +545,38 @@ Standard structure as previously defined, ensuring Volume mount points align wit
 
 **Files to Implement (in order):**
 
-1. **`pkg/config/constants.go`** - Define constants
+1. **`internal/config/constants.go`** - Define constants
    - MAX_USERS = 15
    - REGISTRATION_PORT = 8080
    - NODEPORT_MIN = 30000, NODEPORT_MAX = 30015
    - Reserved usernames list
 
-2. **`pkg/k8s/client.go`** - Kubernetes client initialization
+2. **`internal/k8s/client.go`** - Kubernetes client initialization
    - `NewClient()` - Create clientset with InClusterConfig
    - Error handling for API server connection
 
-3. **`pkg/k8s/namespace.go`** - Namespace operations
+3. **`internal/k8s/namespace.go`** - Namespace operations
    - `CreateNamespace(username)` - Create mc-{username} with labels
    - `NamespaceExists(username)` - Check if already exists
    - `CountUserNamespaces()` - Count namespaces for user limit check
 
-4. **`pkg/k8s/rbac.go`** - RBAC resource creation
+4. **`internal/k8s/rbac.go`** - RBAC resource creation
    - `CreateServiceAccount(namespace, username)` - Create SA
    - `CreateRole(namespace)` - Create minecraft-manager Role
    - `CreateRoleBinding(namespace, username)` - Bind SA to Role
    - `UpdateClusterRoleBinding(username, namespace)` - Add user to capacity checker
    - `CreateResourceQuota(namespace)` - Apply compute limits
 
-5. **`pkg/k8s/token.go`** - Token generation
+5. **`internal/k8s/token.go`** - Token generation
    - `GenerateToken(namespace, serviceAccountName)` - Use TokenRequest API
    - Set 5-year expiration (157680000 seconds)
 
-6. **`pkg/registration/validator.go`** - Username validation
+6. **`internal/registration/validator.go`** - Username validation
    - `ValidateUsername(username)` - Check format (alphanumeric, 3-16 chars)
    - Check against reserved names (system, admin, root, etc.)
    - Return descriptive errors
 
-7. **`pkg/registration/handler.go`** - HTTP endpoint
+7. **`internal/registration/handler.go`** - HTTP endpoint
    - `RegisterHandler(w http.ResponseWriter, r *http.Request)` - Main handler
    - Parse JSON request body
    - Orchestrate registration flow (validate → check limit → create resources → generate token)
@@ -571,10 +592,10 @@ Standard structure as previously defined, ensuring Volume mount points align wit
    - Test locally, push to Docker Hub
 
 ### Deliverables
-- [ ] All `pkg/k8s/` files implemented (client, namespace, rbac, token)
-- [ ] All `pkg/registration/` files implemented (validator, handler)
-- [ ] All `pkg/config/` files implemented (constants)
-- [ ] `cmd/registration-server/main.go` HTTP server running
+- [x] All `internal/k8s/` files implemented (client, namespace, rbac, token)
+- [x] All `internal/registration/` files implemented (validator, handler)
+- [x] All `internal/config/` files implemented (constants)
+- [x] `cmd/registration-server/main.go` HTTP server running
 - [ ] Dockerfile for registration service created
 - [ ] Service can create all user resources (namespace, RBAC, ResourceQuota)
 - [ ] Service generates valid ServiceAccount tokens (5-year expiration)
@@ -595,18 +616,63 @@ Standard structure as previously defined, ensuring Volume mount points align wit
 - Implement Polling Logic for NodePort retrieval
 - Embed cluster endpoint in CLI binary
 
-### Implementation Notes
+### Implementation Roadmap
 
 **Files to Implement:**
-- **`cmd/kubecraft/main.go`** - CLI entrypoint with Cobra commands
-- **`pkg/k8s/server.go`** - Server management operations (create, delete, list, capacity checks, NodePort allocation)
-- **`pkg/config/config.go`** - Read/write `~/.kubecraft/config` file
-- **`pkg/config/constants.go`** - Update with cluster endpoint (shared with registration service)
+
+1. **`internal/cli/root.go`** - Root command and configuration
+   - Initialize Cobra root command
+   - Load configuration from `~/.kubecraft/config`
+   - Set up global flags (verbose, config path)
+   - Initialize K8s client from stored token
+
+2. **`internal/cli/register.go`** - Registration command
+   - Send HTTP POST to registration service with username
+   - Parse JSON response containing token
+   - Save token to `~/.kubecraft/config`
+   - Display success message with next steps
+
+3. **`internal/cli/server/server.go`** - Server command group
+   - Parent command for server subcommands
+   - Shared validation (ensure user is registered)
+
+4. **`internal/cli/server/create.go`** - Create server command
+   - Validate server name format
+   - Run pre-flight capacity check before creation
+   - Create PVC, StatefulSet, and Service via K8s API
+   - Allocate NodePort from reserved range (30000-30015)
+   - Poll until pod is ready, then display connection info
+
+5. **`internal/cli/server/list.go`** - List servers command
+   - Query StatefulSets in user's namespace
+   - Display table with server name, status, NodePort, age
+
+6. **`internal/cli/server/start.go`** - Start server command
+   - Scale StatefulSet replicas from 0 to 1
+   - Poll until pod is ready
+
+7. **`internal/cli/server/stop.go`** - Stop server command
+   - Scale StatefulSet replicas from 1 to 0
+   - Preserves PVC data for later restart
+
+8. **`internal/cli/server/delete.go`** - Delete server command
+   - Prompt for confirmation
+   - Delete StatefulSet, Service, and PVC
+   - Warn that world data will be permanently lost
+
+9. **`internal/k8s/server.go`** - Server management operations
+   - `CheckNodeCapacity()` - Pre-flight RAM check before server creation
+   - `AllocateNodePort()` - Find first available port in 30000-30015 range
+   - `CreateServer()` - Create PVC, StatefulSet, Service
+   - `DeleteServer()` - Remove all server resources
+   - `ListServers()` - Get all servers in namespace
+   - `ScaleServer()` - Start/stop by scaling replicas
+   - `WaitForReady()` - Poll until pod is running and ready
 
 **Reuses from Phase 2.5:**
-- `pkg/k8s/client.go` - Already implemented for registration service
-- `pkg/k8s/namespace.go` - For capacity checks (counting namespaces)
-- `pkg/config/constants.go` - Shared constants
+- `internal/k8s/client.go` - Already implemented for registration service
+- `internal/k8s/namespace.go` - For capacity checks (counting namespaces)
+- `internal/config/constants.go` - Shared constants
 
 ### Authentication Architecture
 
@@ -625,265 +691,25 @@ Standard structure as previously defined, ensuring Volume mount points align wit
 - User's namespace and data persist in cluster
 - User must contact admin to reset account (or add token refresh feature later)
 
-### Key Code Examples
+### Key Features to Implement
 
-**Server Creation (pkg/k8s/server.go) - UPDATED:**
-```go
-package k8s
+**Pre-flight Capacity Check:**
+- Before creating a server, sum memory requests from all running Minecraft pods
+- Compare against available RAM (8GB total - 2GB system overhead)
+- Reject creation if insufficient capacity, with helpful error message
+- Prevents OOM situations that would crash the node
 
-import (
-    "context"
-    "fmt"
-    "time"
-    appsv1 "k8s.io/api/apps/v1"
-    corev1 "k8s.io/api/core/v1"
-    "k8s.io/apimachinery/pkg/api/resource"
-    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-    "k8s.io/apimachinery/pkg/util/intstr"
-)
+**NodePort Allocation:**
+- Scan all Services across all `mc-*` namespaces
+- Find first unused port in 30000-30015 range
+- Explicitly assign port when creating Service
+- Prevents port collisions between users
 
-// CheckNodeCapacity ensures the node has sufficient RAM before scheduling a new server
-// This prevents OOM (Out of Memory) situations that would crash the entire node
-func (c *Client) CheckNodeCapacity(ctx context.Context) error {
-    const (
-        totalNodeRAM     = 8 * 1024 * 1024 * 1024  // 8GB in bytes (t3.large)
-        systemOverhead   = 2 * 1024 * 1024 * 1024  // 2GB reserved for K3s, OS, etc.
-        safetyMargin     = 1536 * 1024 * 1024      // 1.5GB safety buffer
-        newServerRequest = 768 * 1024 * 1024       // 768Mi per new server (from requests.memory)
-    )
-
-    availableRAM := totalNodeRAM - systemOverhead
-
-    // Strategy: Sum all current Pod memory requests across the cluster
-    // This is more reliable than metrics-server (which may not be installed)
-    // and reflects Kubernetes' scheduling decisions
-
-    // 1. Get all namespaces with kubecraft label
-    namespaces, err := c.clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
-        LabelSelector: "app=kubecraft",
-    })
-    if err != nil {
-        return fmt.Errorf("failed to list namespaces: %w", err)
-    }
-
-    // 2. Sum memory requests from all running pods
-    var totalMemoryRequests int64 = 0
-
-    for _, ns := range namespaces.Items {
-        pods, err := c.clientset.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
-            LabelSelector: "app=minecraft",
-            FieldSelector: "status.phase=Running", // Only count running pods
-        })
-        if err != nil {
-            return fmt.Errorf("failed to list pods in namespace %s: %w", ns.Name, err)
-        }
-
-        for _, pod := range pods.Items {
-            for _, container := range pod.Spec.Containers {
-                // Extract memory request
-                if memRequest, ok := container.Resources.Requests[corev1.ResourceMemory]; ok {
-                    totalMemoryRequests += memRequest.Value()
-                }
-            }
-        }
-    }
-
-    // 3. Calculate free RAM
-    freeRAM := availableRAM - totalMemoryRequests
-
-    // 4. Check if we have enough space for the new server + safety margin
-    requiredRAM := newServerRequest + safetyMargin
-
-    if freeRAM < requiredRAM {
-        // Build helpful error message
-        return fmt.Errorf(
-            "insufficient cluster capacity\n"+
-                "  Available RAM: %.2f GB\n"+
-                "  Currently Used: %.2f GB\n"+
-                "  Free RAM: %.2f GB\n"+
-                "  Required (new server + safety margin): %.2f GB\n\n"+
-                "Try:\n"+
-                "  • Stop an idle server: kubecraft server stop <name>\n"+
-                "  • Delete unused servers: kubecraft server delete <name>\n"+
-                "  • List your servers: kubecraft server list",
-            bytesToGB(availableRAM),
-            bytesToGB(totalMemoryRequests),
-            bytesToGB(freeRAM),
-            bytesToGB(requiredRAM),
-        )
-    }
-
-    return nil // Capacity check passed
-}
-
-// bytesToGB converts bytes to gigabytes for human-readable output
-func bytesToGB(bytes int64) float64 {
-    return float64(bytes) / (1024 * 1024 * 1024)
-}
-
-func (c *Client) CreateServer(ctx context.Context, config ServerConfig) error {
-    
-    // 1. Run Pre-flight Check
-    if err := c.CheckNodeCapacity(ctx); err != nil {
-        return fmt.Errorf("capacity check failed: %w", err)
-    }
-
-    // 2. Create PVC (standard)
-    // ... (PVC creation code, ensure storageClassName is "local-path") ...
-    
-    // 3. Create StatefulSet (standard)
-    // ... (StatefulSet creation code) ...
-    
-    // 4. Allocate NodePort (CRITICAL: prevents port collisions)
-    nodePort, err := c.allocateNodePort(ctx)
-    if err != nil {
-        return fmt.Errorf("failed to allocate NodePort: %w", err)
-    }
-
-    // 5. Create Service (NodePort)
-    service := &corev1.Service{
-        ObjectMeta: metav1.ObjectMeta{
-            Name:      config.Name,
-            Namespace: c.namespace,
-            Labels: map[string]string{
-                "app":    "minecraft",
-                "server": config.Name,
-            },
-        },
-        Spec: corev1.ServiceSpec{
-            Type: corev1.ServiceTypeNodePort, // CHANGED from LoadBalancer
-            Selector: map[string]string{
-                "app":    "minecraft",
-                "server": config.Name,
-            },
-            Ports: []corev1.ServicePort{
-                {
-                    Port:       25565,
-                    TargetPort: intstr.FromInt(25565),
-                    Protocol:   corev1.ProtocolTCP,
-                    NodePort:   nodePort, // EXPLICIT assignment in our range
-                },
-            },
-        },
-    }
-
-    _, err = c.clientset.CoreV1().Services(c.namespace).Create(ctx, service, metav1.CreateOptions{})
-    return err
-}
-
-// allocateNodePort finds the first available port in the reserved range (30000-30015)
-func (c *Client) allocateNodePort(ctx context.Context) (int32, error) {
-    const (
-        minPort = 30000
-        maxPort = 30015 // Supports up to 16 servers (more than our 15-server limit)
-    )
-
-    // 1. List all Services across all mc-* namespaces to find used ports
-    usedPorts := make(map[int32]bool)
-
-    // Get all namespaces with label app=kubecraft
-    namespaces, err := c.clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
-        LabelSelector: "app=kubecraft",
-    })
-    if err != nil {
-        return 0, fmt.Errorf("failed to list namespaces: %w", err)
-    }
-
-    // Collect all NodePorts in use across all user namespaces
-    for _, ns := range namespaces.Items {
-        services, err := c.clientset.CoreV1().Services(ns.Name).List(ctx, metav1.ListOptions{
-            LabelSelector: "app=minecraft",
-        })
-        if err != nil {
-            return 0, fmt.Errorf("failed to list services in namespace %s: %w", ns.Name, err)
-        }
-
-        for _, svc := range services.Items {
-            for _, port := range svc.Spec.Ports {
-                if port.NodePort != 0 {
-                    usedPorts[port.NodePort] = true
-                }
-            }
-        }
-    }
-
-    // 2. Find the first available port in our range
-    for port := minPort; port <= maxPort; port++ {
-        if !usedPorts[int32(port)] {
-            return int32(port), nil
-        }
-    }
-
-    // 3. No ports available - cluster is at maximum capacity
-    return 0, fmt.Errorf("all NodePorts in range %d-%d are allocated (max %d servers reached)",
-        minPort, maxPort, maxPort-minPort+1)
-}
-
-// WaitForReady polls until the pod is running and returns the NodePort
-func (c *Client) WaitForReady(ctx context.Context, name string) (int32, error) {
-    // Poll for up to 5 minutes (typical Minecraft startup time)
-    timeout := time.After(5 * time.Minute)
-    ticker := time.NewTicker(5 * time.Second)
-    defer ticker.Stop()
-
-    for {
-        select {
-        case <-timeout:
-            return 0, fmt.Errorf("timeout waiting for server %s to become ready", name)
-
-        case <-ticker.C:
-            // 1. Check if Pod is Running and Ready
-            pods, err := c.clientset.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{
-                LabelSelector: fmt.Sprintf("app=minecraft,server=%s", name),
-            })
-            if err != nil {
-                continue // Retry on transient errors
-            }
-
-            if len(pods.Items) == 0 {
-                continue // Pod not created yet
-            }
-
-            pod := pods.Items[0]
-
-            // Check if pod is Running
-            if pod.Status.Phase != corev1.PodRunning {
-                continue
-            }
-
-            // Check if readiness probe has passed
-            ready := false
-            for _, condition := range pod.Status.Conditions {
-                if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
-                    ready = true
-                    break
-                }
-            }
-
-            if !ready {
-                continue
-            }
-
-            // 2. Pod is ready! Retrieve the NodePort from Service
-            svc, err := c.clientset.CoreV1().Services(c.namespace).Get(ctx, name, metav1.GetOptions{})
-            if err != nil {
-                return 0, fmt.Errorf("server is ready but failed to get service: %w", err)
-            }
-
-            if len(svc.Spec.Ports) == 0 {
-                return 0, fmt.Errorf("service has no ports configured")
-            }
-
-            nodePort := svc.Spec.Ports[0].NodePort
-            if nodePort == 0 {
-                return 0, fmt.Errorf("service NodePort not assigned")
-            }
-
-            return nodePort, nil
-        }
-    }
-}
-```
+**Server Readiness Polling:**
+- After creating StatefulSet, poll for pod status
+- Check both `phase=Running` and `Ready` condition
+- Timeout after 5 minutes with helpful error
+- Return NodePort for user to connect
 
 ### What to Learn
 

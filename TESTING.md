@@ -335,51 +335,64 @@ If you encounter issues not covered here:
 
 # Go Testing Guide
 
-This section covers the Go tests for the `pkg/` packages (Phase 2.5 code).
+This section covers the Go tests for the `internal/` packages (Phase 2.5 code).
 
 ## Go Test Structure
 
 ```
-pkg/
+internal/
 ├── config/
 │   └── constants_test.go      # Unit tests for constants
 ├── k8s/
-│   ├── client_test.go          # Client initialization tests
-│   ├── namespace_test.go       # Namespace operation tests
-│   ├── rbac_test.go            # RBAC creation tests
-│   ├── token_test.go           # Token generation tests
-│   └── helpers_test.go         # Shared test utilities
+│   ├── client_test.go          # Integration tests (//go:build integration)
+│   ├── namespace_test.go       # Integration tests (//go:build integration)
+│   ├── rbac_test.go            # Integration tests (//go:build integration)
+│   ├── token_test.go           # Integration tests (//go:build integration)
+│   └── helpers_test.go         # Shared test utilities (//go:build integration)
 └── registration/
-    ├── validator_test.go       # Username validation tests
-    ├── handler_test.go         # HTTP handler integration tests
-    └── helpers_test.go         # Test helpers
+    ├── validator_test.go       # Unit tests (no build tag)
+    ├── handler_test.go         # Integration tests (//go:build integration)
+    └── helpers_test.go         # Test helpers (//go:build integration)
 ```
+
+## Build Tags
+
+Tests are separated using Go build tags:
+
+| Tag | Description | Cluster Required |
+|-----|-------------|------------------|
+| (none) | Unit tests - run by default | No |
+| `integration` | Integration tests - require `-tags=integration` | Yes |
+
+Files with `//go:build integration` at the top are excluded from normal `go test` runs.
 
 ## Quick Start
 
-### Run All Go Tests
+### Run Unit Tests Only (No Cluster Needed)
 
 ```bash
-go test -v ./pkg/...
+go test -v ./internal/...
 ```
 
-### Run Specific Package Tests
+This runs only tests WITHOUT the `integration` build tag:
+- `internal/config/constants_test.go`
+- `internal/registration/validator_test.go`
+
+### Run All Tests Including Integration (Requires Cluster)
 
 ```bash
-# Unit tests (no cluster needed)
-go test -v ./pkg/config
-
-# Integration tests (requires k8s cluster)
-go test -v ./pkg/k8s
+go test -v -tags=integration ./internal/...
 ```
+
+This runs ALL tests (unit + integration).
 
 ## Prerequisites
 
-### For Unit Tests (constants)
+### For Unit Tests
 
-No prerequisites - these run anywhere.
+No prerequisites - these run anywhere with Go installed.
 
-### For Integration Tests (k8s package)
+### For Integration Tests
 
 1. **Kubernetes cluster running**
    ```bash
@@ -396,34 +409,40 @@ No prerequisites - these run anywhere.
 
 ## Test Categories
 
-### **Unit Tests** (`pkg/config/`)
+### **Unit Tests** (no build tag)
+
+**Packages:** `internal/config/`, `internal/registration/` (validator only)
 
 **What they test:**
 - Constant values (MaxUsers, ports, etc.)
 - Resource names
 - Token expiry calculation
 - NodePort range validation
+- Username validation logic
 
 **Run:**
 ```bash
-go test -v ./pkg/config
+go test -v ./internal/...
 ```
 
 **Duration:** < 1 second
 
 ---
 
-### **Integration Tests** (`pkg/k8s/`)
+### **Integration Tests** (`//go:build integration`)
+
+**Packages:** `internal/k8s/`, `internal/registration/` (handler only)
 
 **What they test:**
 - Client initialization (`client_test.go`)
 - Namespace creation and management (`namespace_test.go`)
 - RBAC resource creation (`rbac_test.go`)
 - ServiceAccount token generation (`token_test.go`)
+- HTTP handler with real K8s resources (`handler_test.go`)
 
 **Run:**
 ```bash
-go test -v ./pkg/k8s
+go test -v -tags=integration ./internal/...
 ```
 
 **Duration:** ~30-60 seconds (creates real resources)
@@ -449,7 +468,7 @@ Tests all configuration constants:
 
 **Example:**
 ```bash
-go test -v ./pkg/config -run TestConstants_TokenExpiry
+go test -v ./internal/config -run TestConstants_TokenExpiry
 ```
 
 ---
@@ -465,7 +484,7 @@ Tests Kubernetes client initialization:
 
 **Example:**
 ```bash
-go test -v ./pkg/k8s -run TestClient
+go test -v -tags=integration ./internal/k8s -run TestClient
 ```
 
 ---
@@ -482,7 +501,7 @@ Tests namespace operations:
 
 **Example:**
 ```bash
-go test -v ./pkg/k8s -run TestNamespace
+go test -v -tags=integration ./internal/k8s -run TestNamespace
 ```
 
 ---
@@ -500,7 +519,7 @@ Tests RBAC resource creation:
 
 **Example:**
 ```bash
-go test -v ./pkg/k8s -run TestRBAC
+go test -v -tags=integration ./internal/k8s -run TestRBAC
 ```
 
 ---
@@ -516,7 +535,7 @@ Tests ServiceAccount token generation:
 
 **Example:**
 ```bash
-go test -v ./pkg/k8s -run TestGenerateToken
+go test -v -tags=integration ./internal/k8s -run TestGenerateToken
 ```
 
 ---
@@ -535,7 +554,7 @@ Tests username validation logic:
 
 **Example:**
 ```bash
-go test -v ./pkg/registration -run TestValidateUsername
+go test -v ./internal/registration -run TestValidateUsername
 ```
 
 **Duration:** < 1 second
@@ -556,7 +575,7 @@ Tests registration HTTP handler:
 
 **Example:**
 ```bash
-go test -v ./pkg/registration -run TestHandler
+go test -v -tags=integration ./internal/registration -run TestHandler
 ```
 
 **Duration:** ~30-60 seconds (requires cluster + RBAC)
@@ -566,8 +585,14 @@ go test -v ./pkg/registration -run TestHandler
 ## Running with Coverage
 
 ```bash
-# Generate coverage report
-go test -v -coverprofile=coverage.out ./pkg/...
+# Unit tests coverage
+go test -v -coverprofile=coverage.out ./internal/config/... ./internal/registration/...
+
+# All tests coverage (requires cluster)
+go test -v -tags=integration -coverprofile=coverage.out \
+  ./internal/config/... \
+  ./internal/k8s/... \
+  ./internal/registration/...
 
 # View coverage in terminal
 go tool cover -func=coverage.out
@@ -576,28 +601,60 @@ go tool cover -func=coverage.out
 go tool cover -html=coverage.out
 ```
 
+**Note:** Coverage must be collected on specific packages that have test files. Using `./internal/...` will fail with `covdata` errors for packages without tests (like `internal/cli`).
+
 ## Running with Race Detection
 
 ```bash
-# Detect race conditions
-go test -v -race ./pkg/...
+# Unit tests with race detection
+go test -v -race ./internal/...
+
+# All tests with race detection (requires cluster)
+go test -v -race -tags=integration ./internal/...
 ```
 
 ## CI/CD Integration
 
-Tests run automatically in GitHub Actions:
+Tests run automatically in GitHub Actions via two separate workflows:
 
-**Workflow:** `.github/workflows/test-packages.yml`
+### Unit Tests Workflow
+
+**Workflow:** `.github/workflows/test-unit.yml`
 
 **Triggers:**
 - Push to `main` branch
 - Pull requests to `main`
-- Changes to `pkg/**`, `cmd/registration-server/**`, `go.mod`, `go.sum`
+- Changes to `internal/**`, `cmd/**`, `go.mod`, `go.sum`
 
-**Jobs:**
-1. **unit-tests** - Constants + validator tests (fast, no cluster)
-2. **integration-tests** - k8s + handler tests in k3d cluster
-3. **test-summary** - Reports overall status
+**What it runs:**
+```bash
+go test -v -race -coverprofile=coverage.out \
+  ./internal/config/... \
+  ./internal/registration/...
+```
+
+**Duration:** ~30 seconds (no cluster needed)
+
+---
+
+### Integration Tests Workflow
+
+**Workflow:** `.github/workflows/test-integration.yml`
+
+**Triggers:**
+- Push to `main` branch
+- Pull requests to `main`
+- Changes to `internal/**`, `cmd/**`, `go.mod`, `go.sum`
+
+**What it runs:**
+```bash
+go test -v -race -tags=integration -coverprofile=coverage.out \
+  ./internal/config/... \
+  ./internal/k8s/... \
+  ./internal/registration/...
+```
+
+**Duration:** ~2-3 minutes (spins up k3d cluster)
 
 ## Common Issues & Troubleshooting
 
@@ -661,26 +718,33 @@ kubectl delete ns mc-testuser-123456
 
 ---
 
-## Test Helpers (`testutil/helpers.go`)
+## Test Helpers
 
-Shared utilities for integration tests:
+Test helper functions are defined in `*_test.go` files within each package:
 
-| Function | Purpose |
-|----------|---------|
-| `GetTestClient(t)` | Initialize k8s client from kubeconfig |
-| `UniqueUsername()` | Generate unique test username |
-| `CleanupNamespace(t, client, username)` | Delete namespace and wait |
-| `CleanupClusterRoleBinding(t, client, username)` | Remove user from CRB |
-| `EnsureSystemRBAC(t, client)` | Create ClusterRole/Binding if missing |
-| `WaitForServiceAccount(t, client, ns, name)` | Wait for SA to be ready |
+- `internal/k8s/helpers_test.go` - K8s test utilities
+- `internal/registration/helpers_test.go` - Registration test utilities
+
+| Function | Package | Purpose |
+|----------|---------|---------|
+| `GetTestClient(t)` | k8s | Initialize k8s client from kubeconfig |
+| `UniqueUsername()` | k8s | Generate unique test username |
+| `CleanupNamespace(t, client, username)` | k8s | Delete namespace and wait |
+| `CleanupClusterRoleBinding(t, client, username)` | k8s | Remove user from CRB |
+| `EnsureSystemRBAC(t, client)` | k8s | Create ClusterRole/Binding if missing |
+| `WaitForServiceAccount(t, client, ns, name)` | k8s | Wait for SA to be ready |
 
 **Example usage:**
 ```go
+//go:build integration
+
+package k8s
+
 func TestMyFeature(t *testing.T) {
-    client := testutil.GetTestClient(t)
-    username := testutil.UniqueUsername()
-    defer testutil.CleanupNamespace(t, client, username)
-    
+    client := GetTestClient(t)
+    username := UniqueUsername()
+    defer CleanupNamespace(t, client, username)
+
     // Your test code here
 }
 ```
@@ -701,9 +765,9 @@ func TestMyFeature(t *testing.T) {
 
 | Package | Current Coverage | Target | Status |
 |---------|-----------------|--------|--------|
-| `pkg/config` | ~95% | 90% | ✅ Excellent |
-| `pkg/k8s` | ~70% | 70% | ✅ Good |
-| `pkg/registration` | ~85% | 80% | ✅ Excellent |
+| `internal/config` | ~95% | 90% | ✅ Excellent |
+| `internal/k8s` | ~70% | 70% | ✅ Good |
+| `internal/registration` | ~85% | 80% | ✅ Excellent |
 | **Overall** | ~80% | 70% | ✅ Meeting goals |
 
 ---
@@ -717,7 +781,8 @@ func TestMyFeature(t *testing.T) {
 
 ---
 
-**Last updated:** 2026-01-10
+**Last updated:** 2026-01-25
 **Test files:** 8 files, ~1400 lines of test code
 **Total tests:** ~50 test functions
+**Build tags:** Unit tests (no tag), Integration tests (`//go:build integration`)
 
