@@ -8,20 +8,13 @@ import (
 
 	"github.com/baighasan/kubecraft/internal/k8s"
 	"github.com/baighasan/kubecraft/internal/registration"
-	"k8s.io/client-go/util/homedir"
 )
 
 func main() {
-	// Get the k8s client, first try in cluster (regular use case)
 	k8sClient, err := k8s.NewInClusterClient()
 	if err != nil {
-		// If that doesn't work fall back to default path
-		kubeconfigPath := homedir.HomeDir() + "/.kube/config"
-		k8sClient, err = k8s.NewClientFromKubeConfig(kubeconfigPath)
-		if err != nil {
-			fmt.Printf("failed to create k8s client: %s\n", err)
-			os.Exit(1)
-		}
+		fmt.Printf("failed to create k8s client: %s\n", err)
+		os.Exit(1)
 	}
 
 	// Set up routes
