@@ -62,6 +62,3 @@ const (
 	secondsPerYear     = 365 * 24 * 60 * 60
 	TokenExpirySeconds = 5 * secondsPerYear
 )
-
-// Cluster Endpoint
-const ClusterEndpoint = "https://CLUSTER_IP:6443"

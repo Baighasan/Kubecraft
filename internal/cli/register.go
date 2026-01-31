@@ -1,1 +1,3 @@
 package cli
+
+func registerCmd() {}
