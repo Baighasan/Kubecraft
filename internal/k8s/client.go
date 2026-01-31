@@ -50,6 +50,20 @@ func NewClientFromToken(token string, endpoint string) (*Client, error) {
 	return client, nil
 }
 
+// NewClientFromRestConfig creates a Client from an existing rest.Config.
+// Useful for testing with kubeconfig-derived configurations.
+func NewClientFromRestConfig(config *rest.Config) (*Client, error) {
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("error getting kubernetes client: %w", err)
+	}
+
+	return &Client{
+		clientset: clientset,
+		namespace: "",
+	}, nil
+}
+
 // GetClientset returns the underlying Kubernetes clientset
 // Primarily used for testing and advanced operations
 func (c *Client) GetClientset() *kubernetes.Clientset {

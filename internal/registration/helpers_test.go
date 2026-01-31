@@ -14,6 +14,7 @@ import (
 	"github.com/baighasan/kubecraft/internal/k8s"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // getTestClient creates a k8s client for integration tests
@@ -30,7 +31,12 @@ func getTestClient(t *testing.T) *k8s.Client {
 		kubeconfig = filepath.Join(home, ".kube", "config")
 	}
 
-	client, err := k8s.NewClientFromKubeConfig(kubeconfig)
+	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		t.Fatalf("Failed to build config from kubeconfig: %v", err)
+	}
+
+	client, err := k8s.NewClientFromRestConfig(restConfig)
 	if err != nil {
 		t.Fatalf("Failed to create test client: %v", err)
 	}
