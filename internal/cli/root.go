@@ -44,17 +44,13 @@ func init() {
 			return fmt.Errorf("error while loading config: %v", err)
 		}
 
-		K8sClient, err = k8s.NewClientFromToken(AppConfig.Token, AppConfig.ClusterEndpoint)
+		K8sClient, err = k8s.NewClientFromToken(AppConfig.Token, config.ClusterEndpoint)
 		if err != nil {
 			return fmt.Errorf("error while creating k8s client: %v", err)
 		}
 
 		return nil
 	}
-
-	// Register subcommands
-	rootCmd.AddCommand(registerCmd)
-	rootCmd.AddCommand(serverCmd)
 }
 
 func Execute() {

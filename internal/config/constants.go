@@ -57,6 +57,9 @@ var ReservedUserNames = []string{
 	"kubecraft-system",
 }
 
+// Cluster endpoint (injected at build time via ldflags)
+var ClusterEndpoint = "localhost"
+
 // Token Configuration
 const (
 	secondsPerYear     = 365 * 24 * 60 * 60

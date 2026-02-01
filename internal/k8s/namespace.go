@@ -69,6 +69,24 @@ func (c *Client) NamespaceExists(username string) (bool, error) {
 	return true, nil
 }
 
+func (c *Client) DeleteNamespace(username string) error {
+	nsName := config.NamespacePrefix + username
+
+	err := c.clientset.
+		CoreV1().
+		Namespaces().
+		Delete(
+			context.TODO(),
+			nsName,
+			metav1.DeleteOptions{},
+		)
+	if err != nil {
+		return fmt.Errorf("failed to delete namespace: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Client) CountUserNamespaces() (int, error) {
 	// Get all the existing namespaces as a list
 	nsList, err := c.clientset.

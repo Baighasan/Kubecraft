@@ -10,9 +10,8 @@ import (
 
 // Config represents the user's saved configuration
 type Config struct {
-	Username        string `yaml:"username"`
-	Token           string `yaml:"token"`
-	ClusterEndpoint string `yaml:"cluster_endpoint"`
+	Username string `yaml:"username"`
+	Token    string `yaml:"token"`
 }
 
 // GetConfigPath returns the path to ~/.kubecraft/config
@@ -113,10 +112,6 @@ func (c *Config) Validate() error {
 
 	if len(c.Token) == 0 {
 		return fmt.Errorf("token is missing")
-	}
-
-	if len(c.ClusterEndpoint) == 0 {
-		return fmt.Errorf("cluster endpoint is missing")
 	}
 
 	return nil

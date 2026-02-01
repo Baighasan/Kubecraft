@@ -218,3 +218,41 @@ func (c *Client) AddUserToCapacityChecker(username string) error {
 
 	return nil
 }
+
+func (c *Client) RemoveUserFromCapacityChecker(username string) error {
+	crb, err := c.clientset.
+		RbacV1().
+		ClusterRoleBindings().
+		Get(
+			context.TODO(),
+			config.CapacityCheckerBinding,
+			metav1.GetOptions{},
+		)
+	if err != nil {
+		return fmt.Errorf("could not get ClusterRoleBinding %s: %w", config.CapacityCheckerBinding, err)
+	}
+
+	// Filter out the user's subject
+	filtered := make([]rbacv1.Subject, 0, len(crb.Subjects))
+	for _, s := range crb.Subjects {
+		if s.Name == username && s.Namespace == c.namespace {
+			continue
+		}
+		filtered = append(filtered, s)
+	}
+	crb.Subjects = filtered
+
+	_, err = c.clientset.
+		RbacV1().
+		ClusterRoleBindings().
+		Update(
+			context.TODO(),
+			crb,
+			metav1.UpdateOptions{},
+		)
+	if err != nil {
+		return fmt.Errorf("could not update ClusterRoleBinding %s: %w", config.CapacityCheckerBinding, err)
+	}
+
+	return nil
+}

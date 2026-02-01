@@ -85,7 +85,8 @@ jobs:
           go test -v -race -tags=integration -coverprofile=coverage.out \
             ./internal/config/... \
             ./internal/k8s/... \
-            ./internal/registration/...
+            ./internal/registration/... \
+            ./internal/cli/...
 
       - name: Display coverage
         if: success()

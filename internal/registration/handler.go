@@ -66,46 +66,67 @@ func NewRegistrationHandler(k8sClient *k8s.Client) http.HandlerFunc {
 		}
 
 		// Create k8s resources
+		// If any step fails after namespace creation, clean up by deleting the namespace
+		// (all namespace-scoped resources are garbage collected with it)
+		namespaceCreated := false
+		capacityCheckerUpdated := false
+
+		cleanup := func() {
+			if capacityCheckerUpdated {
+				k8sClient.RemoveUserFromCapacityChecker(req.Username)
+			}
+			if namespaceCreated {
+				k8sClient.DeleteNamespace(req.Username)
+			}
+		}
 
 		// Create namespace
 		if err := k8sClient.CreateNamespace(req.Username); err != nil {
 			sendError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create namespace: %v", err))
 			return
 		}
+		namespaceCreated = true
 
 		// Create ServiceAccount
 		if err := k8sClient.CreateServiceAccount(req.Username); err != nil {
+			cleanup()
 			sendError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create serviceaccount: %v", err))
 			return
 		}
 
 		// Create Role
 		if err := k8sClient.CreateRole(); err != nil {
+			cleanup()
 			sendError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create role: %v", err))
 			return
 		}
 
 		// Create RoleBinding
 		if err := k8sClient.CreateRoleBinding(req.Username); err != nil {
+			cleanup()
 			sendError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create rolebinding: %v", err))
 			return
 		}
 
 		// Create ResourceQuota
 		if err := k8sClient.CreateResourceQuota(req.Username); err != nil {
+			cleanup()
 			sendError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create resourcequota: %v", err))
 			return
 		}
 
 		// Add user to capacity checker ClusterRoleBinding
 		if err := k8sClient.AddUserToCapacityChecker(req.Username); err != nil {
+			cleanup()
 			sendError(w, http.StatusInternalServerError, fmt.Sprintf("failed to add user to capacity checker: %v", err))
 			return
 		}
+		capacityCheckerUpdated = true
 
 		// Generate token
 		token, err := k8sClient.GenerateToken(req.Username)
 		if err != nil {
+			cleanup()
 			sendError(w, http.StatusInternalServerError, fmt.Sprintf("failed to generate token: %v", err))
 			return
 		}
