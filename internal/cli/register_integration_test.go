@@ -17,32 +17,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// getTestClient creates a k8s client for integration tests
-func getTestClient(t *testing.T) *k8s.Client {
-	t.Helper()
-
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if kubeconfig == "" {
-		home := os.Getenv("HOME")
-		if home == "" {
-			t.Fatal("HOME environment variable not set")
-		}
-		kubeconfig = filepath.Join(home, ".kube", "config")
-	}
-
-	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		t.Fatalf("Failed to build config from kubeconfig: %v", err)
-	}
-
-	client, err := k8s.NewClientFromRestConfig(restConfig)
-	if err != nil {
-		t.Fatalf("Failed to create test client: %v", err)
-	}
-
-	return client
-}
-
 // TestRegisterIntegration_EndToEnd tests the full registration flow:
 // CLI register function -> mock HTTP server with real registration handler -> real K8s cluster
 func TestRegisterIntegration_EndToEnd(t *testing.T) {
@@ -52,30 +26,25 @@ func TestRegisterIntegration_EndToEnd(t *testing.T) {
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", origHome)
 
-	// Also need kubeconfig accessible - copy or set KUBECONFIG
 	kubeconfig := os.Getenv("KUBECONFIG")
 	if kubeconfig == "" {
 		kubeconfig = filepath.Join(origHome, ".kube", "config")
 	}
 	os.Setenv("KUBECONFIG", kubeconfig)
 
-	// Create real k8s client and registration handler
-	client := getTestClient(t)
-	k8s.EnsureSystemRBAC(t, client)
+	client := getIntegrationTestClient(t)
+	ensureTestSystemRBAC(t, client)
 	handler := registration.NewRegistrationHandler(client)
 
-	// Start a test HTTP server with the real handler
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The registration handler is mounted at /register
 		handler(w, r)
 	}))
 	defer server.Close()
 
-	username := k8s.UniqueUsername()
-	defer k8s.CleanupNamespace(t, client, username)
-	defer k8s.CleanupClusterRoleBinding(t, client, username)
+	username := uniqueTestUsername()
+	defer cleanupTestNamespace(t, client, username)
+	defer cleanupTestClusterRoleBinding(t, client, username)
 
-	// Call registerUserAtURL with the test server
 	err := registerUserAtURL(username, server.URL+"/register")
 	if err != nil {
 		t.Fatalf("registerUserAtURL() error = %v", err)
@@ -106,7 +75,7 @@ func TestRegisterIntegration_EndToEnd(t *testing.T) {
 }
 
 // TestRegisterIntegration_DuplicateBlockedByConfig tests that registering
-// a second time is blocked by the existing config file (before even hitting the server)
+// a second time is blocked by the existing config file
 func TestRegisterIntegration_DuplicateBlockedByConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	origHome := os.Getenv("HOME")
@@ -119,8 +88,8 @@ func TestRegisterIntegration_DuplicateBlockedByConfig(t *testing.T) {
 	}
 	os.Setenv("KUBECONFIG", kubeconfig)
 
-	client := getTestClient(t)
-	k8s.EnsureSystemRBAC(t, client)
+	client := getIntegrationTestClient(t)
+	ensureTestSystemRBAC(t, client)
 	handler := registration.NewRegistrationHandler(client)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -128,9 +97,9 @@ func TestRegisterIntegration_DuplicateBlockedByConfig(t *testing.T) {
 	}))
 	defer server.Close()
 
-	username := k8s.UniqueUsername()
-	defer k8s.CleanupNamespace(t, client, username)
-	defer k8s.CleanupClusterRoleBinding(t, client, username)
+	username := uniqueTestUsername()
+	defer cleanupTestNamespace(t, client, username)
+	defer cleanupTestClusterRoleBinding(t, client, username)
 
 	// First registration should succeed
 	err := registerUserAtURL(username, server.URL+"/register")
@@ -164,8 +133,8 @@ func TestRegisterIntegration_ServerRejectsDuplicate(t *testing.T) {
 	}
 	os.Setenv("KUBECONFIG", kubeconfig)
 
-	client := getTestClient(t)
-	k8s.EnsureSystemRBAC(t, client)
+	client := getIntegrationTestClient(t)
+	ensureTestSystemRBAC(t, client)
 	handler := registration.NewRegistrationHandler(client)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -173,9 +142,9 @@ func TestRegisterIntegration_ServerRejectsDuplicate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	username := k8s.UniqueUsername()
-	defer k8s.CleanupNamespace(t, client, username)
-	defer k8s.CleanupClusterRoleBinding(t, client, username)
+	username := uniqueTestUsername()
+	defer cleanupTestNamespace(t, client, username)
+	defer cleanupTestClusterRoleBinding(t, client, username)
 
 	// First registration
 	err := registerUserAtURL(username, server.URL+"/register")
@@ -193,14 +162,9 @@ func TestRegisterIntegration_ServerRejectsDuplicate(t *testing.T) {
 		t.Fatal("expected error for duplicate username, got nil")
 	}
 
-	// The handler returns StatusConflict which is not StatusOK
-	var regResp RegisterResponse
-	// We can't inspect the raw response, but the error message should contain
-	// the server's error message
 	if err.Error() != "failed to register user: Username already registered" {
 		t.Errorf("error = %q, want %q", err.Error(), "failed to register user: Username already registered")
 	}
-	_ = regResp
 }
 
 // TestRegisterIntegration_InvalidUsername tests that invalid usernames
@@ -217,7 +181,7 @@ func TestRegisterIntegration_InvalidUsername(t *testing.T) {
 	}
 	os.Setenv("KUBECONFIG", kubeconfig)
 
-	client := getTestClient(t)
+	client := getIntegrationTestClient(t)
 	handler := registration.NewRegistrationHandler(client)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -257,19 +221,18 @@ func TestRegisterIntegration_TokenIsValid(t *testing.T) {
 	}
 	os.Setenv("KUBECONFIG", kubeconfig)
 
-	client := getTestClient(t)
-	k8s.EnsureSystemRBAC(t, client)
+	client := getIntegrationTestClient(t)
+	ensureTestSystemRBAC(t, client)
 
-	// Use the handler directly via httptest to get the token
 	handler := registration.NewRegistrationHandler(client)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handler(w, r)
 	}))
 	defer server.Close()
 
-	username := k8s.UniqueUsername()
-	defer k8s.CleanupNamespace(t, client, username)
-	defer k8s.CleanupClusterRoleBinding(t, client, username)
+	username := uniqueTestUsername()
+	defer cleanupTestNamespace(t, client, username)
+	defer cleanupTestClusterRoleBinding(t, client, username)
 
 	// Register and get the token
 	reqBody, _ := json.Marshal(RegisterRequest{Username: username})
@@ -287,7 +250,6 @@ func TestRegisterIntegration_TokenIsValid(t *testing.T) {
 	}
 
 	// Verify the token can construct a valid client
-	// We use the k3d cluster's API server address from the kubeconfig
 	restConfig, _ := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	tokenClient, err := k8s.NewClientFromToken(regResp.Token, restConfig.Host)
 	if err != nil {
