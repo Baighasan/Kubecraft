@@ -86,7 +86,7 @@ jobs:
             ./internal/config/... \
             ./internal/k8s/... \
             ./internal/registration/... \
-            ./internal/cli/...
+            ./internal/cli
 
       - name: Display coverage
         if: success()

@@ -67,7 +67,7 @@ func registerUserAtURL(username string, url string) error {
 		return fmt.Errorf("registration server returned status %d and response could not be parsed", resp.StatusCode)
 	}
 
-	if resp.StatusCode != http.StatusOK || regResponse.Status != "success" {
+	if resp.StatusCode >= 300 || regResponse.Status != "success" {
 		return fmt.Errorf("failed to register user: %s", regResponse.Message)
 	}
 
