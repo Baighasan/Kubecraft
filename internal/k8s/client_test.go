@@ -27,7 +27,7 @@ func TestNewInClusterClient_OutsideCluster(t *testing.T) {
 func TestNewClientFromToken(t *testing.T) {
 	// NewClientFromToken should create a client without error given valid inputs
 	// (it won't connect, but it should construct the client)
-	client, err := NewClientFromToken("fake-token", "127.0.0.1:6443", "")
+	client, err := NewClientFromToken("fake-token", "127.0.0.1:6443", "testuser")
 	if err != nil {
 		t.Fatalf("NewClientFromToken() error = %v", err)
 	}
@@ -40,8 +40,9 @@ func TestNewClientFromToken(t *testing.T) {
 		t.Error("client.clientset is nil")
 	}
 
-	if client.namespace != "" {
-		t.Errorf("client.namespace = %q, want empty string", client.namespace)
+	expectedNamespace := "mc-testuser"
+	if client.namespace != expectedNamespace {
+		t.Errorf("client.namespace = %q, want %q", client.namespace, expectedNamespace)
 	}
 }
 
