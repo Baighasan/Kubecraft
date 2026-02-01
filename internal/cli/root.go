@@ -15,7 +15,7 @@ var (
 	verbose   bool
 )
 
-var rootCmd = &cobra.Command{
+var RootCmd = &cobra.Command{
 	Use:   "kubecraft",
 	Short: "Minecraft server management cli",
 	Long:  "todo",
@@ -23,10 +23,10 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	// Persistent flags available to all subcommands
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 
 	// Check config exists, load it, and create client (register command doesn't need config)
-	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+	RootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if cmd.Name() == "register" {
 			return nil
 		}
@@ -54,7 +54,7 @@ func init() {
 }
 
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Oops. An error while executing Kubecraft '%s'\n", err)
 		os.Exit(1)
 	}

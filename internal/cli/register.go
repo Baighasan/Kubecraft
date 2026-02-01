@@ -92,5 +92,5 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	rootCmd.AddCommand(registerCmd)
+	RootCmd.AddCommand(registerCmd)
 }
