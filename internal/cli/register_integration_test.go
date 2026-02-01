@@ -251,7 +251,7 @@ func TestRegisterIntegration_TokenIsValid(t *testing.T) {
 
 	// Verify the token can construct a valid client
 	restConfig, _ := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	tokenClient, err := k8s.NewClientFromToken(regResp.Token, restConfig.Host)
+	tokenClient, err := k8s.NewClientFromToken(regResp.Token, restConfig.Host, "")
 	if err != nil {
 		t.Fatalf("NewClientFromToken() error = %v", err)
 	}

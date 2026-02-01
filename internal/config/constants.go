@@ -25,6 +25,7 @@ const (
 const (
 	CommonLabelKey      = "app"
 	CommonLabelValue    = "kubecraft"
+	CommonLabelValuePod = "minecraft"
 	CommonLabelSelector = CommonLabelKey + "=" + CommonLabelValue
 )
 
@@ -64,4 +65,16 @@ var ClusterEndpoint = "localhost"
 const (
 	secondsPerYear     = 365 * 24 * 60 * 60
 	TokenExpirySeconds = 5 * secondsPerYear
+)
+
+// Server Configuration
+const (
+	MinServerNameLength = 3
+	MaxServerNameLength = 16
+	ServerImage         = "hasanbaig786/kubecraft"
+	MinecraftPort       = 25565
+	ServerStorageSize   = "5Gi"
+	ServerStorageClass  = "local-path"
+	CapacityThreshold   = 1536 // 1.5GB in MiB — minimum free RAM to allow creation
+	TotalAvailableRAM   = 6144 // 6GB in MiB — total RAM for workloads
 )

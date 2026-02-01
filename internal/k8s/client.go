@@ -3,6 +3,7 @@ package k8s
 import (
 	"fmt"
 
+	"github.com/baighasan/kubecraft/internal/config"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -14,13 +15,13 @@ type Client struct {
 
 func NewInClusterClient() (*Client, error) {
 	// Get kubeconfig file within cluster
-	config, err := rest.InClusterConfig()
+	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("error getting kubernetes config: %w", err)
 	}
 
 	// Get clientset using config to talk to kubernetes
-	clientset, err := kubernetes.NewForConfig(config)
+	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("error getting kubernetes client: %w", err)
 	}
@@ -31,20 +32,20 @@ func NewInClusterClient() (*Client, error) {
 	}, nil
 }
 
-func NewClientFromToken(token string, endpoint string) (*Client, error) {
-	config := &rest.Config{
+func NewClientFromToken(token string, endpoint string, username string) (*Client, error) {
+	cfg := &rest.Config{
 		Host:        "https://" + endpoint,
 		BearerToken: token,
 	}
 
-	clientset, err := kubernetes.NewForConfig(config)
+	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("error getting kubernetes client: %w", err)
 	}
 
 	client := &Client{
 		clientset: clientset,
-		namespace: "",
+		namespace: config.NamespacePrefix + username,
 	}
 
 	return client, nil

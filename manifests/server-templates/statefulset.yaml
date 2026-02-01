@@ -19,6 +19,7 @@ spec:
       labels:
         app: minecraft
         server: {servername}
+        user: {username}
     spec:
       containers:
         - name: minecraft
@@ -35,13 +36,14 @@ spec:
           ports:
           - containerPort: 25565
             name: minecraft
+            protocol: TCP
           resources:
             requests:
-              memory: "768Mi"
               cpu: "500m"
+              memory: "768Mi"
             limits:
-              memory: "1Gi"
               cpu: "750m"
+              memory: "1Gi"
           readinessProbe:
             tcpSocket:
               port: 25565
