@@ -33,7 +33,7 @@ func executeStart(serverName string) error {
 	// Scale up server (statefulset)
 	err = cli.K8sClient.ScaleServer(serverName, 1)
 	if err != nil {
-		return fmt.Errorf("couldn't start server (%s): %v", serverName, err)
+		return fmt.Errorf("could not start server (%s): %v", serverName, err)
 	}
 
 	// Wait for server to become ready
