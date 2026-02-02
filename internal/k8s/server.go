@@ -437,3 +437,19 @@ func (c *Client) ServerExists(serverName string) (bool, error) {
 
 	return true, nil
 }
+
+func (c *Client) GetNodePort(serverName string) (int32, error) {
+	svc, err := c.clientset.
+		CoreV1().
+		Services(c.namespace).
+		Get(
+			context.TODO(),
+			serverName,
+			metav1.GetOptions{},
+		)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list servers while finding nodeport: %w", err)
+	}
+
+	return svc.Spec.Ports[0].NodePort, nil
+}
