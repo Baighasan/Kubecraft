@@ -30,12 +30,13 @@ func executeStop(serverName string) error {
 	}
 
 	// Scale down server (statefulset)
+	fmt.Fprintf(os.Stderr, "Stopping server %s...\n", serverName)
 	err = cli.K8sClient.ScaleServer(serverName, 0)
 	if err != nil {
 		return fmt.Errorf("could not stop server: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Server %s successfully stopped", serverName)
+	fmt.Fprintf(os.Stderr, "Server %s stopped. Data is preserved.\n", serverName)
 	return nil
 }
 

@@ -43,12 +43,13 @@ func executeDelete(serverName string) error {
 	}
 
 	// Delete the server
+	fmt.Fprintf(os.Stderr, "Deleting server %s...\n", serverName)
 	err = cli.K8sClient.DeleteServer(serverName)
 	if err != nil {
 		return fmt.Errorf("could not delete server: %v", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Server %s successfully deleted, data permanently gone", serverName)
+	fmt.Fprintf(os.Stderr, "Server %s deleted. All data is permanently gone.\n", serverName)
 	return nil
 }
 

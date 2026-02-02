@@ -31,12 +31,14 @@ func executeStart(serverName string) error {
 	}
 
 	// Scale up server (statefulset)
+	fmt.Fprintf(os.Stderr, "Starting server %s...\n", serverName)
 	err = cli.K8sClient.ScaleServer(serverName, 1)
 	if err != nil {
 		return fmt.Errorf("could not start server (%s): %v", serverName, err)
 	}
 
 	// Wait for server to become ready
+	fmt.Fprintln(os.Stderr, "Waiting for server to be ready...")
 	err = cli.K8sClient.WaitForReady(serverName)
 	if err != nil {
 		return fmt.Errorf("server %s unresponsive: %v", serverName, err)
@@ -48,8 +50,7 @@ func executeStart(serverName string) error {
 		return fmt.Errorf("couldn't get node port: %v", err)
 	}
 
-	// Print success message to user
-	fmt.Fprintf(os.Stdout, "Server (%s) is ready at %s:%d.\n", serverName, config.ClusterEndpoint, serverPort)
+	fmt.Fprintf(os.Stderr, "Server %s is ready at %s:%d\n", serverName, config.ClusterEndpoint, serverPort)
 
 	return nil
 }

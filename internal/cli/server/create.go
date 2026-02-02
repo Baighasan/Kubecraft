@@ -37,9 +37,10 @@ func executeCreate(serverName string) error {
 	}
 
 	// Run pre-flight checks
+	fmt.Fprintln(os.Stderr, "Checking cluster capacity...")
 	err = cli.K8sClient.CheckNodeCapacity()
 	if err != nil {
-		return err // returning error to send correct message to user, unsure if this is best practice
+		return err
 	}
 
 	// Get available nodeport
@@ -49,12 +50,14 @@ func executeCreate(serverName string) error {
 	}
 
 	// Create Minecraft server
+	fmt.Fprintf(os.Stderr, "Creating server %s...\n", serverName)
 	err = cli.K8sClient.CreateServer(serverName, cli.AppConfig.Username, port)
 	if err != nil {
 		return fmt.Errorf("cannot create server: %w", err)
 	}
 
 	// Wait for pod to be ready
+	fmt.Fprintln(os.Stderr, "Waiting for server to be ready...")
 	err = cli.K8sClient.WaitForReady(serverName)
 	if err != nil {
 		return fmt.Errorf("server %s unable to start: %w", serverName, err)
