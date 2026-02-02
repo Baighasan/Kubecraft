@@ -39,7 +39,8 @@ jobs:
           go test -v -race -coverprofile=coverage.out \
             ./internal/config/... \
             ./internal/registration/... \
-            ./internal/cli
+            ./internal/cli \
+            ./internal/cli/server
 
       - name: Display coverage
         if: success()

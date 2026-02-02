@@ -17,11 +17,11 @@ var createCmd = &cobra.Command{
 	Long:  "I'll think of this later",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serverName := args[0]
-		return execute(serverName)
+		return executeCreate(serverName)
 	},
 }
 
-func execute(serverName string) error {
+func executeCreate(serverName string) error {
 	// Validate server name
 	if err := ValidateServerName(serverName); err != nil {
 		return fmt.Errorf("invalid server name: %w", err)
