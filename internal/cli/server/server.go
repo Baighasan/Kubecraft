@@ -7,7 +7,7 @@ import (
 
 var serverCmd = &cobra.Command{
 	Use:   "server",
-	Short: "Manage minecraft servers",
+	Short: "Manage Minecraft servers",
 	Long:  "I'll think of this later",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return nil

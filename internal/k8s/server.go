@@ -394,11 +394,9 @@ func (c *Client) ScaleServer(serverName string, replicas int32) error {
 	return nil
 }
 
-func (c *Client) WaitForReady(serverName string, timeout time.Duration) error {
-	const maxAttempts = 15
-	const pollInterval = 5 * time.Second
+func (c *Client) WaitForReady(serverName string) error {
 
-	for i := 0; i < maxAttempts; i++ {
+	for i := 0; i < config.MaxAttempts; i++ {
 		pod, err := c.clientset.
 			CoreV1().
 			Pods(c.namespace).
@@ -415,7 +413,7 @@ func (c *Client) WaitForReady(serverName string, timeout time.Duration) error {
 			}
 		}
 
-		time.Sleep(pollInterval)
+		time.Sleep(config.PollInterval)
 	}
 
 	return fmt.Errorf("timed out waiting for server (%s) to become ready", serverName)

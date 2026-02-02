@@ -5,7 +5,6 @@ package k8s
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/baighasan/kubecraft/internal/config"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -409,7 +408,7 @@ func TestWaitForReady_TimeoutOnNonexistent(t *testing.T) {
 	client.namespace = config.NamespacePrefix + username
 
 	// Should timeout since no server exists
-	err := client.WaitForReady("nonexistent", 10*time.Second)
+	err := client.WaitForReady("nonexistent")
 	if err == nil {
 		t.Error("WaitForReady() expected timeout error, got nil")
 	}

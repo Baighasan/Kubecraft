@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 // User Limits
 const (
 	MaxUsers          = 15
@@ -77,4 +79,10 @@ const (
 	ServerStorageClass  = "local-path"
 	CapacityThreshold   = 1536 // 1.5GB in MiB — minimum free RAM to allow creation
 	TotalAvailableRAM   = 6144 // 6GB in MiB — total RAM for workloads
+)
+
+// Readiness Check
+const (
+	MaxAttempts  = 15
+	PollInterval = 5 * time.Second
 )
