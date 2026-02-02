@@ -40,5 +40,5 @@ func executeStop(serverName string) error {
 }
 
 func init() {
-	serverCmd.AddCommand(startCmd)
+	serverCmd.AddCommand(stopCmd)
 }
