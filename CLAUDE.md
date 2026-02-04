@@ -104,12 +104,16 @@ kubecraft/                                    # Repository root
 │   ├── security.tf
 │   └── variables.tf
 │
+├── Makefile                                  # Build automation (dev/prod targets, cluster management)
+│
 ├── scripts/                                  # Admin helper scripts
 │   └── delete-user.sh                        # Manual user cleanup
 │
 └── .github/workflows/                        # CI/CD pipelines
     ├── minecraft-image.yml
     ├── registration-image.yml
+    ├── test-unit.yml
+    ├── test-integration.yml
     └── cli-release.yml
 ```
 
@@ -134,11 +138,11 @@ kubecraft/                                    # Repository root
 - **Purpose:** Wrapper around client-go for common K8s operations
 - **Used by:** Both CLI and registration service
 - **Provides:**
-  - `client.go` - Initialize Kubernetes clientset (InClusterConfig or kubeconfig)
+  - `client.go` - Initialize Kubernetes clientset (InClusterConfig, token-based, or rest.Config). Supports TLS skip for dev via build-time `TLSInsecure` variable
   - `namespace.go` - Create/check namespaces, count users
   - `rbac.go` - Create ServiceAccounts, Roles, RoleBindings, patch ClusterRoleBindings
   - `token.go` - Generate ServiceAccount tokens via TokenRequest API
-  - `server.go` - Create/delete StatefulSets, allocate NodePorts, check capacity
+  - `server.go` - ServerExists, CreateServer, DeleteServer, ListServers, ScaleServer, WaitForReady, CheckNodeCapacity, AllocateNodePort, GetNodePort
 
 **`internal/registration/`** - Registration Business Logic
 - **Purpose:** HTTP endpoint handling and validation
@@ -151,7 +155,9 @@ kubecraft/                                    # Repository root
 - **Purpose:** Constants and configuration file management
 - **Used by:** Both CLI and registration service
 - **Provides:**
-  - `constants.go` - MAX_USERS (15), cluster endpoint, NodePort range (30000-30015)
+  - `constants.go` - MAX_USERS (15), NodePort range (30000-30015), server resource limits, readiness polling config
+  - `config.go` - Config struct (Username, Token), load/save/validate from `~/.kubecraft/config`
+  - Build-time variables: `ClusterEndpoint` (injected via ldflags), `TLSInsecure` (dev only)
 
 **`internal/cli/`** - CLI Command Implementations
 - **Purpose:** Cobra command implementations for the CLI tool
@@ -202,15 +208,24 @@ import (
 ### Build Commands
 
 ```bash
-# Build CLI tool
-go build -o bin/kubecraft ./cmd/kubecraft
+# Build CLI tool (dev — TLS insecure, local cluster endpoint)
+make build-dev
+
+# Build CLI tool (prod — TLS strict, EC2 endpoint)
+make build-prod
+
+# Build with custom endpoint
+make build-dev DEV_ENDPOINT=192.168.1.100:6443
 
 # Build registration service
 go build -o bin/registration-server ./cmd/registration-server
 
-# Run locally (development)
-go run ./cmd/kubecraft register --username alice
-go run ./cmd/registration-server
+# Local k3d cluster management
+make cluster-up
+make cluster-down
+
+# Run tests
+make test
 
 # Add/update dependencies
 go mod tidy
@@ -592,10 +607,12 @@ Standard structure as previously defined, ensuring Volume mount points align wit
    - Test locally, push to Docker Hub
 
 ### Deliverables
-- [x] All `internal/k8s/` files implemented (client, namespace, rbac, token)
+- [x] All `internal/k8s/` files implemented (client, namespace, rbac, token, server)
 - [x] All `internal/registration/` files implemented (validator, handler)
-- [x] All `internal/config/` files implemented (constants)
+- [x] All `internal/config/` files implemented (constants, config)
 - [x] `cmd/registration-server/main.go` HTTP server running
+- [x] Unit tests for registration CLI command
+- [x] Integration tests for registration CLI command and k8s operations
 - [ ] Dockerfile for registration service created
 - [ ] Service can create all user resources (namespace, RBAC, ResourceQuota)
 - [ ] Service generates valid ServiceAccount tokens (5-year expiration)
@@ -663,11 +680,13 @@ Standard structure as previously defined, ensuring Volume mount points align wit
 9. **`internal/k8s/server.go`** - Server management operations
    - `CheckNodeCapacity()` - Pre-flight RAM check before server creation
    - `AllocateNodePort()` - Find first available port in 30000-30015 range
-   - `CreateServer()` - Create PVC, StatefulSet, Service
-   - `DeleteServer()` - Remove all server resources
-   - `ListServers()` - Get all servers in namespace
-   - `ScaleServer()` - Start/stop by scaling replicas
+   - `CreateServer()` - Create Service and StatefulSet (with cleanup on failure)
+   - `DeleteServer()` - Remove StatefulSet, Service, and PVC
+   - `ListServers()` - Get all servers in namespace with status, port, age
+   - `ScaleServer()` - Start/stop by scaling replicas (0 or 1)
    - `WaitForReady()` - Poll until pod is running and ready
+   - `ServerExists()` - Check if StatefulSet exists
+   - `GetNodePort()` - Look up a single server's NodePort
 
 **Reuses from Phase 2.5:**
 - `internal/k8s/client.go` - Already implemented for registration service
@@ -736,16 +755,19 @@ Standard structure as previously defined, ensuring Volume mount points align wit
 - Version information in binaries
 
 ### Deliverables
-- [ ] `kubecraft register` command implemented
-- [ ] Cluster endpoint hardcoded in binary (no --cluster flag needed)
-- [ ] CLI sends HTTP request to registration service
-- [ ] CLI saves received token to `~/.kubecraft/config`
-- [ ] CLI reads token from config for all server commands
-- [ ] CLI tool implements "Pre-flight" memory check
-- [ ] `create` command waits for Pod to be Ready
-- [ ] `create` command returns the specific NodePort (e.g., 30001) to the user
+- [x] `kubecraft register` command implemented
+- [x] Cluster endpoint injected at build time via ldflags (no --cluster flag needed)
+- [x] CLI sends HTTP request to registration service
+- [x] CLI saves received token to `~/.kubecraft/config`
+- [x] CLI reads token from config for all server commands
+- [x] CLI tool implements "Pre-flight" memory check
+- [x] `create` command waits for Pod to be Ready
+- [x] `create` command returns the specific NodePort (e.g., 30001) to the user
+- [x] All server subcommands implemented (create, list, start, stop, delete)
+- [x] Unit tests for server name validation and age formatting
+- [x] Integration tests for k8s server operations
+- [x] Makefile for dev/prod builds and local cluster management
 - [ ] Optional: `config export/import` commands for multi-computer usage
-- [ ] Comprehensive help text and table formatting
 
 ---
 
@@ -913,9 +935,8 @@ resource "aws_instance" "k3s" {
 **Existing:**
 - `minecraft-image.yml` - Builds and pushes Minecraft server image
 - `cli-release.yml` - Builds CLI binaries for multiple platforms
-- `test.yml` - Runs unit and integration tests
-
-**New:**
+- `test-unit.yml` - Runs unit tests (config, registration, cli, cli/server)
+- `test-integration.yml` - Runs integration tests with k3d cluster (k8s, cli)
 - `registration-image.yml` - Builds and pushes registration service image
 
 **Build-time Configuration:**

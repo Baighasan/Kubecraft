@@ -177,6 +177,10 @@ func (c *Client) CreateServer(serverName string, username string, nodePort int32
 									Name:  "MAX_PLAYERS",
 									Value: "5",
 								},
+								{
+									Name:  "JAVA_MEMORY",
+									Value: config.ServerJavaMemory,
+								},
 							},
 							Ports: []corev1.ContainerPort{
 								{

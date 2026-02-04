@@ -43,6 +43,7 @@ const (
 const (
 	ServerMemoryRequest = "768Mi"
 	ServerMemoryLimit   = "1Gi"
+	ServerJavaMemory    = "768M"
 	ServerCPURequest    = "500m"
 	ServerCPULimit      = "750m"
 )
@@ -60,8 +61,12 @@ var ReservedUserNames = []string{
 	"kubecraft-system",
 }
 
-// Cluster endpoint (injected at build time via ldflags)
-var ClusterEndpoint = "localhost"
+// Env variables injected at build time via ldflags
+var (
+	ClusterEndpoint = "localhost" // K8s API server address (host:port)
+	NodeAddress     = "localhost" // Public IP/hostname for Minecraft connections
+	TLSInsecure     = "false"
+)
 
 // Token Configuration
 const (
@@ -83,6 +88,6 @@ const (
 
 // Readiness Check
 const (
-	MaxAttempts  = 15
+	MaxAttempts  = 30
 	PollInterval = 5 * time.Second
 )

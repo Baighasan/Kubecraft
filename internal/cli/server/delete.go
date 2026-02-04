@@ -32,7 +32,7 @@ func executeDelete(serverName string) error {
 
 	// Prompt user to type server name to confirm
 	var input string
-	fmt.Fprintf(os.Stderr, "Enter %s to confirm", serverName)
+	fmt.Fprintf(os.Stderr, "Enter %s to confirm\n\n", serverName)
 	scanner := bufio.NewScanner(os.Stdin)
 	if scanner.Scan() {
 		input = scanner.Text()

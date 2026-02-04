@@ -36,6 +36,9 @@ func NewClientFromToken(token string, endpoint string, username string) (*Client
 	cfg := &rest.Config{
 		Host:        "https://" + endpoint,
 		BearerToken: token,
+		TLSClientConfig: rest.TLSClientConfig{
+			Insecure: config.TLSInsecure == "true",
+		},
 	}
 
 	clientset, err := kubernetes.NewForConfig(cfg)

@@ -50,7 +50,7 @@ func executeStart(serverName string) error {
 		return fmt.Errorf("couldn't get node port: %v", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Server %s is ready at %s:%d\n", serverName, config.ClusterEndpoint, serverPort)
+	fmt.Fprintf(os.Stderr, "Server %s is ready at %s:%d\n", serverName, config.NodeAddress, serverPort)
 
 	return nil
 }

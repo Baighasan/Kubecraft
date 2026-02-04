@@ -22,7 +22,6 @@ spec:
       containers:
       - name: registration
         image: hasanbaig786/kubecraft-registration:latest
-        imagePullPolicy: Never
         ports:
         - containerPort: 8080
         env:

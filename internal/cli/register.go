@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 
@@ -36,7 +37,12 @@ var registerCmd = &cobra.Command{
 }
 
 func registerUser(username string) error {
-	url := fmt.Sprintf("http://%s:%d/register", config.ClusterEndpoint, config.RegistrationServicePort)
+	host, _, err := net.SplitHostPort(config.ClusterEndpoint)
+	if err != nil {
+		// No port in endpoint, use as-is
+		host = config.ClusterEndpoint
+	}
+	url := fmt.Sprintf("http://%s:%d/register", host, config.RegistrationServicePort)
 	return registerUserAtURL(username, url)
 }
 

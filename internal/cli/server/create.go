@@ -63,7 +63,7 @@ func executeCreate(serverName string) error {
 		return fmt.Errorf("server %s unable to start: %w", serverName, err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Server %s is ready at %s:%d\n", serverName, config.ClusterEndpoint, port)
+	fmt.Fprintf(os.Stderr, "Server %s is ready at %s:%d\n", serverName, config.NodeAddress, port)
 
 	return nil
 }
