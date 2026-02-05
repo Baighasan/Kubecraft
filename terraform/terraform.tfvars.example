@@ -1,0 +1,20 @@
+# Oracle Cloud Authentication
+# Get these from OCI Console → User Settings → API Keys
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaaaxxxxxxxxxxxxxxxxxxxxxxxx"
+user_ocid        = "ocid1.user.oc1..aaaaaaaaxxxxxxxxxxxxxxxxxxxxxxxx"
+fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+private_key_path = "~/.oci/oci_api_key.pem"
+
+# Compartment (use tenancy OCID for root compartment)
+compartment_ocid = "ocid1.compartment.oc1..aaaaaaaaxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Region
+region = "us-ashburn-1"
+
+# SSH Access
+ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB... your-email@example.com"
+my_ip          = "203.0.113.50/32"  # Your public IP in CIDR format (use /32 for single IP)
+
+# NodePort Range (default values usually fine)
+node_port_min = 30000
+node_port_max = 30099

@@ -1,2 +1,31 @@
+# IDE
 .idea/
+
+# Binary
 kubecraft
+
+# Terraform state (contains sensitive data)
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Variable files with secrets
+*.tfvars
+!terraform.tfvars.example
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI config
+.terraformrc
+terraform.rc
+
+# Provider plugins (large, downloaded by init)
+.terraform/
