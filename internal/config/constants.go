@@ -39,13 +39,13 @@ const (
 	RegistrationClusterRole    = "kc-registration-admin"
 )
 
-// Resource Limits (per server)
+// Resource Limits (per server) - Optimized for Oracle Cloud (16GB RAM, 3 OCPU)
 const (
-	ServerMemoryRequest = "768Mi"
-	ServerMemoryLimit   = "1Gi"
-	ServerJavaMemory    = "768M"
-	ServerCPURequest    = "500m"
-	ServerCPULimit      = "750m"
+	ServerMemoryRequest = "2Gi"
+	ServerMemoryLimit   = "4Gi"
+	ServerJavaMemory    = "3G"
+	ServerCPURequest    = "1000m"
+	ServerCPULimit      = "1500m"
 )
 
 // Reserved Names
@@ -74,16 +74,16 @@ const (
 	TokenExpirySeconds = 5 * secondsPerYear
 )
 
-// Server Configuration
+// Server Configuration - Optimized for Oracle Cloud (16GB RAM, 3 OCPU)
 const (
 	MinServerNameLength = 3
 	MaxServerNameLength = 16
 	ServerImage         = "hasanbaig786/kubecraft"
 	MinecraftPort       = 25565
-	ServerStorageSize   = "5Gi"
+	ServerStorageSize   = "10Gi"
 	ServerStorageClass  = "local-path"
-	CapacityThreshold   = 1536 // 1.5GB in MiB — minimum free RAM to allow creation
-	TotalAvailableRAM   = 6144 // 6GB in MiB — total RAM for workloads
+	CapacityThreshold   = 4096  // 4GB in MiB — minimum free RAM to allow creation (matches server limit)
+	TotalAvailableRAM   = 14336 // 14GB in MiB — total RAM for workloads (16GB - 2GB system overhead)
 )
 
 // Readiness Check

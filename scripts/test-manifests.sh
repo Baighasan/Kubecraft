@@ -261,13 +261,13 @@ main() {
 
     check_field_exists \
         "${MANIFEST_DIR}/server-templates/statefulset.yaml" \
-        "memory: \"768Mi\"" \
-        "statefulset.yaml has memory request (768Mi)"
+        "memory: \"2Gi\"" \
+        "statefulset.yaml has memory request (2Gi)"
 
     check_field_exists \
         "${MANIFEST_DIR}/server-templates/statefulset.yaml" \
-        "memory: \"1Gi\"" \
-        "statefulset.yaml has memory limit (1Gi)"
+        "memory: \"4Gi\"" \
+        "statefulset.yaml has memory limit (4Gi)"
 
     check_field_exists \
         "${MANIFEST_DIR}/server-templates/service.yaml" \

@@ -147,10 +147,10 @@ func TestConstants_ResourceLimits(t *testing.T) {
 		value string
 		want  string
 	}{
-		{"ServerMemoryRequest", ServerMemoryRequest, "768Mi"},
-		{"ServerMemoryLimit", ServerMemoryLimit, "1Gi"},
-		{"ServerCPURequest", ServerCPURequest, "500m"},
-		{"ServerCPULimit", ServerCPULimit, "750m"},
+		{"ServerMemoryRequest", ServerMemoryRequest, "2Gi"},
+		{"ServerMemoryLimit", ServerMemoryLimit, "4Gi"},
+		{"ServerCPURequest", ServerCPURequest, "1000m"},
+		{"ServerCPULimit", ServerCPULimit, "1500m"},
 	}
 
 	for _, tt := range tests {
@@ -159,5 +159,23 @@ func TestConstants_ResourceLimits(t *testing.T) {
 				t.Errorf("got %q, want %q", tt.value, tt.want)
 			}
 		})
+	}
+}
+
+func TestConstants_ClusterCapacity(t *testing.T) {
+	// Verify cluster capacity is set for Oracle Cloud (14GB available from 16GB total)
+	if TotalAvailableRAM != 14336 {
+		t.Errorf("TotalAvailableRAM = %d, want 14336 (14GB)", TotalAvailableRAM)
+	}
+
+	// Verify capacity threshold matches server memory limit (4GB)
+	if CapacityThreshold != 4096 {
+		t.Errorf("CapacityThreshold = %d, want 4096 (4GB)", CapacityThreshold)
+	}
+
+	// Verify we can fit at least 3 servers concurrently at limit
+	maxServers := TotalAvailableRAM / CapacityThreshold
+	if maxServers < 3 {
+		t.Errorf("Cluster can only fit %d servers at limit, need at least 3", maxServers)
 	}
 }

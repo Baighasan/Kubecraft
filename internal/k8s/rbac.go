@@ -148,10 +148,10 @@ func (c *Client) CreateResourceQuota(username string) error {
 		},
 		Spec: corev1.ResourceQuotaSpec{
 			Hard: map[corev1.ResourceName]resource.Quantity{
-				corev1.ResourceRequestsCPU:            resource.MustParse("1500m"),
-				corev1.ResourceRequestsMemory:         resource.MustParse("1536Mi"),
-				corev1.ResourceLimitsCPU:              resource.MustParse("2250m"),
-				corev1.ResourceLimitsMemory:           resource.MustParse("3Gi"),
+				corev1.ResourceRequestsCPU:            resource.MustParse(config.ServerCPURequest),
+				corev1.ResourceRequestsMemory:         resource.MustParse(config.ServerMemoryRequest),
+				corev1.ResourceLimitsCPU:              resource.MustParse(config.ServerCPULimit),
+				corev1.ResourceLimitsMemory:           resource.MustParse(config.ServerMemoryLimit),
 				corev1.ResourcePersistentVolumeClaims: resource.MustParse("1"),
 			},
 		},

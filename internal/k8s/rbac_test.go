@@ -190,12 +190,12 @@ func TestCreateResourceQuota_Success(t *testing.T) {
 		t.Fatalf("Failed to get ResourceQuota: %v", err)
 	}
 
-	// Verify limits
+	// Verify limits match config constants (optimized for Oracle Cloud A1)
 	expectedLimits := map[string]string{
-		"requests.cpu":           "1500m",
-		"requests.memory":        "1536Mi",
-		"limits.cpu":             "2250m",
-		"limits.memory":          "3Gi",
+		"requests.cpu":           config.ServerCPURequest,
+		"requests.memory":        config.ServerMemoryRequest,
+		"limits.cpu":             config.ServerCPULimit,
+		"limits.memory":          config.ServerMemoryLimit,
 		"persistentvolumeclaims": "1",
 	}
 

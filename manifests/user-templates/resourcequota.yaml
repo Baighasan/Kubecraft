@@ -8,8 +8,8 @@ metadata:
     user: {username}
 spec:
   hard:
-    requests.cpu: "1500m"
-    requests.memory: 1536Mi
-    limits.cpu: "2250m"
-    limits.memory: 3Gi
+    requests.cpu: "1000m"
+    requests.memory: 2Gi
+    limits.cpu: "1500m"
+    limits.memory: 4Gi
     persistentvolumeclaims: "1"

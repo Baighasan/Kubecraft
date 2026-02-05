@@ -39,11 +39,11 @@ spec:
             protocol: TCP
           resources:
             requests:
-              cpu: "500m"
-              memory: "768Mi"
+              cpu: "1000m"
+              memory: "2Gi"
             limits:
-              cpu: "750m"
-              memory: "1Gi"
+              cpu: "1500m"
+              memory: "4Gi"
           readinessProbe:
             tcpSocket:
               port: 25565
@@ -60,4 +60,4 @@ spec:
       storageClassName: "local-path"
       resources:
         requests:
-          storage: 5Gi
+          storage: 10Gi

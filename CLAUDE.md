@@ -7,12 +7,13 @@ Self-service Minecraft server hosting platform where users can create, manage, a
 ## Architecture Summary
 
 **Single-Node Kubernetes Setup:**
-- One EC2 instance (t3.large: 2 vCPU, 8GB RAM) running K3s
+- One Oracle Cloud Ampere instance (3 OCPU, 16GB RAM) running K3s — **Always Free Tier**
 - All components run as pods on this single node
-- Terraform provisions AWS infrastructure
+- Terraform provisions Oracle Cloud Infrastructure (OCI)
 - K3s manages container orchestration
 - **Networking:** `NodePort` services exposing ports 30000-30015 directly on the host IP
-- **Storage:** `local-path` StorageClass writing directly to the EC2 NVMe disk (HostPath)
+- **Storage:** `local-path` StorageClass writing directly to the instance's block volume (HostPath)
+- **Architecture:** ARM64 (Ampere) — requires multi-arch Docker images
 
 **Core Components:**
 1. **CLI Tool**: Go-based command-line interface with direct Kubernetes API access and **pre-flight capacity checks**
@@ -22,14 +23,14 @@ Self-service Minecraft server hosting platform where users can create, manage, a
 5. **System Namespace**: Registration service and optional monitoring tools
 
 **Tech Stack:**
-- Infrastructure: AWS (EC2, VPC), Terraform, K3s
+- Infrastructure: Oracle Cloud (Compute, VCN), Terraform, K3s
 - Application Code: Go 1.25.5 with monorepo structure (single module, multiple binaries)
 - CLI Tool: Go with Cobra framework, client-go (Kubernetes client library)
 - Registration Service: Go HTTP server, client-go with elevated permissions
 - Container Orchestration: K3s (lightweight Kubernetes)
 - Authentication: Kubernetes RBAC + ServiceAccount tokens (5-year expiration)
 - CI/CD: GitHub Actions
-- Container Registry: Docker Hub
+- Container Registry: Docker Hub (multi-arch images for AMD64 + ARM64)
 
 > **📚 For detailed code structure and package responsibilities, see [Code Structure & Architecture](#code-structure--architecture) section below.**
 
@@ -37,9 +38,9 @@ Self-service Minecraft server hosting platform where users can create, manage, a
 
 **Users:** 5 people
 **Servers per user:** Up to 1
-**Concurrent servers:** 2-3 running simultaneously (strict memory limits applied)
+**Concurrent servers:** 3-4 running simultaneously (with 14GB RAM available for workloads)
 **Total servers:** Up to 15 (most stopped to save resources)
-**Monthly cost:** ~$73 (single t3.large EC2 instance with 100GB storage)
+**Monthly cost:** $0 (Oracle Cloud Always Free Tier — Ampere with 100GB storage)
 
 ---
 
@@ -98,11 +99,14 @@ kubecraft/                                    # Repository root
 │   ├── Dockerfile                            # Minecraft server image
 │   └── start.sh                              # Minecraft startup script
 │
-├── terraform/                                # AWS infrastructure as code
-│   ├── main.tf
-│   ├── compute.tf
-│   ├── security.tf
-│   └── variables.tf
+├── terraform/                                # Oracle Cloud infrastructure as code
+│   ├── main.tf                               # Provider config, data sources
+│   ├── network.tf                            # VCN, subnet, internet gateway
+│   ├── compute.tf                            # Ampere A1 instance, cloud-init
+│   ├── security.tf                           # Security list (firewall rules)
+│   ├── variables.tf                          # Input variables
+│   ├── outputs.tf                            # Instance IP, connection info
+│   └── cloud-init.yaml                       # K3s installation script
 │
 ├── Makefile                                  # Build automation (dev/prod targets, cluster management)
 │
@@ -129,7 +133,7 @@ kubecraft/                                    # Repository root
 **`cmd/registration-server/`** - Registration Service (Phase 2.5)
 - **Purpose:** HTTP server for self-service user onboarding
 - **Used by:** CLI's `register` command (one-time interaction)
-- **Runs on:** EC2 instance as a pod in `kubecraft-system` namespace
+- **Runs on:** OCI instance as a pod in `kubecraft-system` namespace
 - **Exposes:** NodePort 30099 for HTTP endpoint
 - **Permissions:** Elevated (ClusterRole) to create namespaces and RBAC
 - **Dependencies:** Imports `internal/k8s`, `internal/registration`, `internal/config`
@@ -211,7 +215,7 @@ import (
 # Build CLI tool (dev — TLS insecure, local cluster endpoint)
 make build-dev
 
-# Build CLI tool (prod — TLS strict, EC2 endpoint)
+# Build CLI tool (prod — TLS strict, OCI instance endpoint)
 make build-prod
 
 # Build with custom endpoint
@@ -235,7 +239,7 @@ go mod tidy
 
 **Registration Flow (One-Time):**
 ```
-User's Computer                    EC2 Instance (Kubernetes Cluster)
+User's Computer                    OCI Instance (Kubernetes Cluster)
 ┌─────────────┐                   ┌──────────────────────────────────┐
 │   kubecraft │ ──HTTP POST──────>│  Registration Service (Pod)      │
 │   CLI       │   (port 30099)    │  - Validates username            │
@@ -252,7 +256,7 @@ User's Computer                    EC2 Instance (Kubernetes Cluster)
 
 **Server Operations Flow (Ongoing):**
 ```
-User's Computer                    EC2 Instance (Kubernetes Cluster)
+User's Computer                    OCI Instance (Kubernetes Cluster)
 ┌─────────────┐                   ┌──────────────────────────────────┐
 │   kubecraft │                   │                                  │
 │   CLI       │ ──────────────────│──> Registration Service         │
@@ -289,7 +293,7 @@ User's Computer                    EC2 Instance (Kubernetes Cluster)
 
 ### Goals
 - Set up development environment
-- **Shift Left:** Develop and test entirely on local clusters before deploying to AWS
+- **Shift Left:** Develop and test entirely on local clusters before deploying to Oracle Cloud
 - Learn foundational concepts
 
 ### What to Learn
@@ -305,6 +309,7 @@ User's Computer                    EC2 Instance (Kubernetes Cluster)
 - docker build, run, compose
 - Image layers and caching
 - Multi-stage builds
+- **Multi-architecture builds** (AMD64 + ARM64)
 
 **Kubernetes concepts (in-depth):**
 - Pods, StatefulSets, Services, Namespaces
@@ -314,12 +319,13 @@ User's Computer                    EC2 Instance (Kubernetes Cluster)
 - ResourceQuotas & Limits
 - Labels and selectors
 
-**AWS basics:**
-- EC2 instances and instance types
-- VPC, subnets, and networking
-- **Security Groups (Ingress ranges)**
-- Elastic IPs
-- Free Tier limits and pricing
+**Oracle Cloud Infrastructure (OCI) basics:**
+- Compute instances and shapes (VM.Standard.A1.Flex = Ampere ARM)
+- Virtual Cloud Networks (VCN), subnets, and networking
+- **Security Lists** (equivalent to AWS Security Groups)
+- Reserved Public IPs
+- **Always Free Tier** resources and limits
+- Compartments and IAM
 
 **Go basics:**
 - Syntax and idioms
@@ -331,7 +337,8 @@ User's Computer                    EC2 Instance (Kubernetes Cluster)
 
 ### Deliverables
 - [ ] Development environment configured (Docker, kubectl, Terraform, Go installed)
-- [ ] AWS, GitHub, Docker Hub accounts created
+- [ ] Oracle Cloud, GitHub, Docker Hub accounts created
+- [ ] OCI CLI configured with API keys
 - [ ] Project repository initialized with proper directory structure
 - [ ] **Local K3s cluster running (k3d or minikube)** for Phase 1-3 development
 - [ ] Basic understanding of Docker and K8s concepts validated
@@ -354,8 +361,8 @@ All manifests are located in the `manifests/` directory, organized by purpose. T
 - **namespace.yaml** - Creates `mc-{username}` namespace with `app: kubecraft` label
 - **serviceaccount.yaml** - ServiceAccount for user authentication
 - **resourcequota.yaml** - Enforces compute limits per user:
-  - CPU: 1500m request, 2250m limit
-  - Memory: 1536Mi request, 3Gi limit
+  - CPU: 1000m request, 1500m limit
+  - Memory: 2Gi request, 4Gi limit
   - PVCs: max 1 per namespace
 - **role.yaml** - `minecraft-manager` Role granting permissions for:
   - PVCs and Services (create, delete, get, list)
@@ -366,9 +373,9 @@ All manifests are located in the `manifests/` directory, organized by purpose. T
 **📁 manifests/server-templates/** - Minecraft server resources (created by CLI)
 - **statefulset.yaml** - Minecraft server StatefulSet with:
   - Container image: `hasanbaig786/kubecraft`
-  - Resource requests: 768Mi RAM, 500m CPU
-  - Resource limits: 1Gi RAM, 750m CPU
-  - Volume mount: `/data` (for world persistence)
+  - Resource requests: 2Gi RAM, 1000m CPU
+  - Resource limits: 4Gi RAM, 1500m CPU
+  - Volume mount: `/data` (for world persistence, 10Gi storage)
   - Readiness probe: TCP socket on port 25565
   - Environment variables: VERSION, GAME_MODE, MAX_PLAYERS, EULA
 - **service.yaml** - NodePort Service exposing port 25565 (NodePort auto-assigned or manually set 30000-30015)
@@ -397,20 +404,22 @@ All manifests are located in the `manifests/` directory, organized by purpose. T
 
 **CAPACITY PLANNING NOTE:**
 ```
-t3.large total: 8GB RAM, 2 vCPU
-System overhead (K3s, OS, monitoring): ~2GB RAM, ~500m CPU
-Available for workloads: ~6GB RAM, ~1.5 vCPU
+Oracle Ampere total: 16GB RAM, 3 OCPU (Always Free Tier - US East Ashburn)
+System overhead (K3s, OS, monitoring): ~2GB RAM, ~0.5 OCPU
+Available for workloads: ~14GB RAM, ~2.5 OCPU
 
-Per-server resources:
-  requests: 768Mi RAM, 500m CPU
-  limits: 1Gi RAM, 750m CPU
+Per-server resources (UPGRADED for better performance):
+  requests: 2Gi RAM, 1000m CPU
+  limits: 4Gi RAM, 1500m CPU
+  Java heap: 3G (4x more than before)
+  Storage: 10Gi (2x more than before)
 
 Capacity calculation:
-  Average case (2 servers running): 2 × 768Mi = 1.5GB RAM
-  Max case (3 servers running): 3 × 1Gi = 3GB RAM
-  Total cluster capacity: 5 users × 3GB = 15GB potential, but only ~4-5 servers run concurrently
+  At requests (7 servers): 7 × 2Gi = 14GB RAM
+  At limits (3 servers): 3 × 4Gi = 12GB RAM
+  Realistic concurrent: 3-4 servers running simultaneously
 
-Safety: Pre-flight check prevents server creation if available RAM < 1.5GB
+Safety: Pre-flight check prevents server creation if available RAM < 4GB
 ```
 
 ### What to Learn
@@ -471,6 +480,7 @@ Safety: Pre-flight check prevents server creation if available RAM < 1.5GB
 
 ### Goals
 - Create a custom Minecraft server Docker image
+- **Build multi-architecture images** (AMD64 for local dev, ARM64 for Oracle Cloud)
 - Configure for Kubernetes deployment
 - Test locally
 
@@ -483,6 +493,17 @@ Standard structure as previously defined, ensuring Volume mount points align wit
 **Dockerfile Best Practices:**
 - Multi-stage builds
 - Layer caching
+- **Multi-architecture builds with docker buildx**
+
+**Multi-Arch Docker Builds:**
+```bash
+# Set up buildx for multi-arch
+docker buildx create --name multiarch --use
+
+# Build and push multi-arch image
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t hasanbaig786/kubecraft:latest --push .
+```
 
 **Minecraft Server Configuration:**
 - server.properties
@@ -496,12 +517,13 @@ Standard structure as previously defined, ensuring Volume mount points align wit
 
 **Docker Build & Push:**
 - Tagging and Registry management
+- Multi-arch manifests
 
 ### Deliverables
-- [ ] Working Dockerfile for Minecraft server
+- [ ] Working Dockerfile for Minecraft server (multi-arch compatible)
 - [ ] Startup script with environment variable configuration
-- [ ] Image built and tested locally
-- [ ] Image pushed to Docker Hub
+- [ ] Image built and tested locally (AMD64)
+- [ ] **Multi-arch image pushed to Docker Hub** (AMD64 + ARM64)
 - [ ] Health check implemented and tested
 
 ---
@@ -714,7 +736,7 @@ Standard structure as previously defined, ensuring Volume mount points align wit
 
 **Pre-flight Capacity Check:**
 - Before creating a server, sum memory requests from all running Minecraft pods
-- Compare against available RAM (8GB total - 2GB system overhead)
+- Compare against available RAM (16GB total - 2GB system overhead = 14GB available)
 - Reject creation if insufficient capacity, with helpful error message
 - Prevents OOM situations that would crash the node
 
@@ -771,110 +793,118 @@ Standard structure as previously defined, ensuring Volume mount points align wit
 
 ---
 
-## Phase 4: Terraform Infrastructure
+## Phase 4: Terraform Infrastructure (Oracle Cloud)
 
 ### Goals
-- Define AWS infrastructure as code
-- Provision EC2 instance with K3s
-- Configure Security Groups for NodePort Range
-- Provision adequate storage for Local Path
+- Define Oracle Cloud infrastructure as code using Terraform
+- Provision Ampere instance with K3s (Always Free Tier)
+- Configure networking and firewall rules for NodePort access
+- Automate K3s installation via cloud-init
 
-### Main Configuration Files Changes
+### Infrastructure Overview
 
-**variables.tf:**
-```hcl
-variable "node_port_range_start" {
-  description = "Start of NodePort range"
-  type        = number
-  default     = 30000
-}
-
-variable "node_port_range_end" {
-  description = "End of NodePort range"
-  type        = number
-  default     = 30015 # Accommodates 15 servers
-}
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  Oracle Cloud (us-ashburn-1)                     │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │              VCN: kubecraft-vcn (10.0.0.0/16)              │ │
+│  │                                                            │ │
+│  │  ┌──────────────────────────────────────────────────────┐ │ │
+│  │  │         Subnet: kubecraft-public (10.0.1.0/24)       │ │ │
+│  │  │                                                      │ │ │
+│  │  │  ┌────────────────────────────────────────────────┐ │ │ │
+│  │  │  │     Compute Instance: kubecraft-k3s            │ │ │ │
+│  │  │  │     • Shape: VM.Standard.A2.Flex (ARM64)       │ │ │ │
+│  │  │  │     • CPU: 3 OCPU                              │ │ │ │
+│  │  │  │     • RAM: 16 GB                               │ │ │ │
+│  │  │  │     • Disk: 100 GB                             │ │ │ │
+│  │  │  │     • OS: Ubuntu 22.04                         │ │ │ │
+│  │  │  │     • K3s installed via cloud-init             │ │ │ │
+│  │  │  └────────────────────────────────────────────────┘ │ │ │
+│  │  └──────────────────────────────────────────────────────┘ │ │
+│  │                          │                                 │ │
+│  │              Route Table → Internet Gateway                │ │
+│  └────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**security.tf (UPDATED):**
-```hcl
-resource "aws_security_group" "k3s" {
-  name        = "${var.cluster_name}-sg"
-  description = "Security group for K3s cluster"
-  vpc_id      = aws_vpc.main.id
+### Terraform File Structure
 
-  # SSH access
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
-    description = "SSH from my IP"
-  }
-
-  # Kubernetes API
-  ingress {
-    from_port   = 6443
-    to_port     = 6443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Kubernetes API"
-  }
-
-  # UPDATED: Minecraft NodePort Range
-  ingress {
-    from_port   = var.node_port_range_start
-    to_port     = var.node_port_range_end
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Minecraft NodePorts (30000-30015)"
-  }
-
-  # Allow all outbound
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "${var.cluster_name}-sg"
-  }
-}
+```
+terraform/
+├── main.tf              # Provider config, data sources (availability domain, Ubuntu image)
+├── variables.tf         # Input variables (OCI credentials, SSH key, IP whitelist)
+├── network.tf           # VCN, subnet, internet gateway, route table
+├── security.tf          # Security list (firewall rules for SSH, K8s API, NodePorts)
+├── compute.tf           # Ampere instance configuration
+├── outputs.tf           # Instance IP, SSH command, cluster endpoint
+├── cloud-init.yaml      # K3s installation script (runs on first boot)
+├── terraform.tfvars     # Your actual values (DO NOT commit to git)
+└── .gitignore           # Ignore tfvars and state files
 ```
 
-**compute.tf (UPDATED):**
-```hcl
-resource "aws_instance" "k3s" {
-  # ... (other config same) ...
+### Resources Created by Terraform
 
-  root_block_device {
-    volume_size = 100 # INCREASED: To accommodate 15 servers x 5GB + OS
-    volume_type = "gp3"
-  }
+| Resource | Purpose |
+|----------|---------|
+| **VCN** | Virtual network (10.0.0.0/16) isolating our infrastructure |
+| **Subnet** | Public subnet (10.0.1.0/24) where the instance lives |
+| **Internet Gateway** | Allows outbound internet access |
+| **Route Table** | Routes 0.0.0.0/0 traffic to internet gateway |
+| **Security List** | Firewall rules (SSH, K8s API, NodePorts) |
+| **Compute Instance** | Ampere ARM64 VM running K3s |
 
-  # ... (user_data same) ...
-}
-```
+### Security List Rules (Firewall)
+
+| Port | Protocol | Source | Purpose |
+|------|----------|--------|---------|
+| 22 | TCP | Your IP only | SSH access |
+| 6443 | TCP | 0.0.0.0/0 | Kubernetes API (kubectl) |
+| 30000-30099 | TCP | 0.0.0.0/0 | Minecraft servers + Registration service |
+
+### Oracle Cloud Always Free Tier Limits (US East Ashburn)
+
+| Resource | Free Tier Limit | Our Usage |
+|----------|-----------------|-----------|
+| Ampere Compute | 3 OCPU, 16GB RAM | 3 OCPU, 16GB (1 instance) |
+| Block Storage | 200GB total | 100GB boot volume |
+| Outbound Data | 10TB/month | Minimal (~5GB/month) |
+| VCN | 2 VCNs | 1 VCN |
+
+### Free Tier Caveats
+
+1. **Idle Reclamation:** Oracle may reclaim idle instances after 7 days — solved with a cron job
+2. **Region Limits:** Free tier specs vary by region; Ashburn offers A2/A3 shapes with max 3 OCPU/16GB
+3. **Account Verification:** Credit card required but won't be charged for Always Free resources
 
 ### What to Learn
 
-**Terraform AWS Provider:**
-- Volume Sizing (100GB buffer)
-- Security Group Ranges
+| Topic | Key Concepts |
+|-------|--------------|
+| **Terraform Basics** | Providers, resources, variables, outputs, state |
+| **HCL Syntax** | Blocks, attributes, references, interpolation |
+| **OCI Networking** | VCN, subnets, security lists, internet gateway |
+| **Cloud-init** | First-boot automation, package installation, scripts |
 
-**AWS Networking:**
-- VPC, Subnets, Route Tables
+### Deployment Steps
 
-**K3s Installation:**
-- User Data scripts
+1. **Prerequisites:** Install Terraform, OCI CLI; create API keys in OCI console
+2. **Configure:** Copy `terraform.tfvars.example` to `terraform.tfvars`, fill in values
+3. **Initialize:** `terraform init` (downloads OCI provider)
+4. **Preview:** `terraform plan` (shows what will be created)
+5. **Apply:** `terraform apply` (creates infrastructure)
+6. **Verify:** SSH into instance, confirm K3s is running
+7. **Get kubeconfig:** Copy `/etc/rancher/k3s/k3s.yaml` to local machine
 
 ### Deliverables
-- [ ] Security Group opens ports 30000-30015 (includes 30099 for registration)
-- [ ] EC2 instance provisioned with 100GB GP3 storage
-- [ ] Admin kubeconfig retrievable via SCP
-- [ ] Can connect to cluster with kubectl
+- [ ] OCI account created with API keys configured
+- [ ] Terraform files written and tested
+- [ ] VCN, Subnet, Security List provisioned
+- [ ] Ampere instance (3 OCPU, 16GB RAM) running
+- [ ] K3s installed and accessible via kubectl
+- [ ] Security List opens ports 22, 6443, 30000-30099
+- [ ] Anti-idle cron job configured
 
 ---
 
@@ -891,7 +921,7 @@ resource "aws_instance" "k3s" {
 1. Create `kubecraft-system` namespace
 2. Apply cluster-wide RBAC (ClusterRole, ClusterRoleBinding for capacity checks)
 3. Deploy registration service (RBAC, Deployment, Service)
-4. Verify registration service is accessible at `http://EC2_IP:30099`
+4. Verify registration service is accessible at `http://OCI_IP:30099`
 
 **Admin Maintenance:**
 - `delete-user.sh` script for removing users if needed
@@ -913,7 +943,7 @@ resource "aws_instance" "k3s" {
 
 ### Deliverables
 - [ ] `kubecraft-system` namespace created
-- [ ] Registration service deployed and running
+- [ ] Registration service deployed and running (ARM64 image)
 - [ ] Registration service accessible via NodePort 30099
 - [ ] Can successfully register users via CLI
 - [ ] Tokens generated are valid and work for server management
@@ -926,27 +956,45 @@ resource "aws_instance" "k3s" {
 ## Phase 6: CI/CD Pipeline
 
 ### Goals
-- Automate building and pushing Docker images
+- Automate building and pushing Docker images **(multi-arch: AMD64 + ARM64)**
 - Automate CLI binary builds and releases
 - Ensure cluster endpoint is updated in CLI on deployment
 
 ### GitHub Actions Workflows
 
 **Existing:**
-- `minecraft-image.yml` - Builds and pushes Minecraft server image
+- `minecraft-image.yml` - Builds and pushes Minecraft server image **(multi-arch)**
 - `cli-release.yml` - Builds CLI binaries for multiple platforms
 - `test-unit.yml` - Runs unit tests (config, registration, cli, cli/server)
 - `test-integration.yml` - Runs integration tests with k3d cluster (k8s, cli)
-- `registration-image.yml` - Builds and pushes registration service image
+- `registration-image.yml` - Builds and pushes registration service image **(multi-arch)**
+
+**Multi-Arch Docker Build Example:**
+```yaml
+# In GitHub Actions workflow
+- name: Set up QEMU
+  uses: docker/setup-qemu-action@v3
+
+- name: Set up Docker Buildx
+  uses: docker/setup-buildx-action@v3
+
+- name: Build and push
+  uses: docker/build-push-action@v5
+  with:
+    context: .
+    platforms: linux/amd64,linux/arm64
+    push: true
+    tags: hasanbaig786/kubecraft:latest
+```
 
 **Build-time Configuration:**
-- CLI build embeds current cluster endpoint (update when EC2 IP changes)
+- CLI build embeds current cluster endpoint (update when OCI IP changes)
 - Version tagging for releases
 
 ### Deliverables
-- [ ] Working CI/CD pipeline for Minecraft image
-- [ ] Working CI/CD pipeline for registration service image
-- [ ] Automated CLI builds for multiple platforms (Linux, macOS, Windows)
+- [ ] Working CI/CD pipeline for Minecraft image **(multi-arch)**
+- [ ] Working CI/CD pipeline for registration service image **(multi-arch)**
+- [ ] Automated CLI builds for multiple platforms (Linux AMD64, Linux ARM64, macOS, Windows)
 - [ ] GitHub releases created on version tags
 - [ ] Documentation on updating cluster endpoint in releases
 
@@ -980,9 +1028,9 @@ resource "aws_instance" "k3s" {
 **Functionality Testing:**
 - [ ] Service created with NodePort type
 - [ ] NodePort assigned is within 30000-30015 range
-- [ ] Can connect with Minecraft client using EC2_IP:NODE_PORT
+- [ ] Can connect with Minecraft client using OCI_IP:NODE_PORT
 - [ ] Pre-flight check prevents creating server if RAM is full
-- [ ] Storage persists on EC2 host disk (check /var/lib/rancher/k3s/storage)
+- [ ] Storage persists on OCI instance disk (check /var/lib/rancher/k3s/storage)
 - [ ] Namespace isolation verified via RBAC
 
 **Load Testing:**
@@ -999,8 +1047,12 @@ resource "aws_instance" "k3s" {
 
 1. Download CLI:
    ```bash
-   # Linux/macOS
-   curl -L https://github.com/yourname/kubecraft/releases/latest/download/kubecraft -o kubecraft
+   # Linux/macOS (Intel/AMD)
+   curl -L https://github.com/yourname/kubecraft/releases/latest/download/kubecraft-linux-amd64 -o kubecraft
+   chmod +x kubecraft
+
+   # Linux (ARM64, e.g., Raspberry Pi)
+   curl -L https://github.com/yourname/kubecraft/releases/latest/download/kubecraft-linux-arm64 -o kubecraft
    chmod +x kubecraft
    ```
 
@@ -1015,11 +1067,11 @@ resource "aws_instance" "k3s" {
    ```bash
    kubecraft server create myserver
    # Waiting for server to start...
-   # ✅ Server Ready! Connect to: 54.123.45.67:30001
+   # ✅ Server Ready! Connect to: 129.146.xx.xx:30001
    ```
 
 4. Connect using Minecraft client:
-   - Server Address: `54.123.45.67:30001`
+   - Server Address: `129.146.xx.xx:30001`
 
 ## Multi-Computer Setup
 
@@ -1045,9 +1097,10 @@ nano ~/.kubecraft/config  # Paste contents
 **ARCHITECTURE.md:**
 - Update diagrams to show NodePort flow and registration service
 - Explain HostPath storage strategy
-- Detail the Memory Overcommitment strategy and safety checks
+- Detail the Memory Overcommitment strategy and safety checks (22GB available)
 - Document authentication flow (ServiceAccount tokens)
 - Explain registration service architecture and permissions
+- Document Oracle Cloud Always Free Tier usage and ARM64 architecture
 
 ### Deliverables
 - [ ] All functionality tested and working
@@ -1062,17 +1115,18 @@ nano ~/.kubecraft/config  # Paste contents
 |------|-------|-------|
 | 1 | Phase 0 | Prerequisites, environment setup, Local K3s |
 | 2 | Phase 1 | Kubernetes manifests, RBAC, registration manifests |
-| 3 | Phase 2 | Minecraft Docker image |
+| 3 | Phase 2 | Minecraft Docker image (multi-arch) |
 | 3-4 | Phase 2.5 | Registration service (HTTP server, token generation) |
 | 4-5 | Phase 3 | CLI tool with registration command and server management |
-| 6 | Phase 4 | Terraform infrastructure (AWS deployment) |
+| 6 | Phase 4 | Terraform infrastructure (Oracle Cloud deployment) |
 | 7 | Phase 5 | System deployment (registration service to cluster) |
-| 8 | Phase 6 | CI/CD pipeline setup |
+| 8 | Phase 6 | CI/CD pipeline setup (multi-arch builds) |
 | 9 | Phase 7 | Testing, bug fixes, documentation |
 
 **Total Duration:** ~9 weeks (2-2.5 months) at 10-15 hours/week
 
 **Note:** Phase 2.5 adds ~2-3 days of work but provides significant UX improvement
+**Note:** Multi-arch builds add ~1 day of work but are required for Oracle Cloud ARM64
 
 ---
 
@@ -1083,51 +1137,72 @@ nano ~/.kubecraft/config  # Paste contents
 - [ ] User can create 1 Minecraft server
 - [ ] Server starts and is accessible via NodePort
 - [ ] World data persists across stop/start
-- [ ] Deployed on AWS with Terraform
+- [ ] Deployed on Oracle Cloud with Terraform (Always Free Tier)
 
 **Complete Project:**
 - [ ] All CLI commands functional with safety checks
 - [ ] Self-service registration working (no admin intervention)
 - [ ] RBAC properly isolating users
-- [ ] Up to 3 servers per user (ResourceQuota enforced)
+- [ ] Up to 1 server per user (ResourceQuota enforced)
 - [ ] 5 users actively using the platform
 - [ ] Registration service enforcing user limit (15 max)
-- [ ] CI/CD pipeline functional
+- [ ] CI/CD pipeline functional (multi-arch images)
+- [ ] Running at $0/month on Oracle Cloud Always Free
 
 ---
 
-## Cost Breakdown (Revised)
+## Cost Breakdown
 
-**Monthly Costs:**
-- EC2 t3.large: ~$60/month
-- EBS Storage (100GB gp3): ~$8/month
-- Data Transfer: ~$5/month
-- Load Balancers: $0 (Removed)
-- **Total: ~$73/month** (~$15/user for 5 users)
+**Monthly Costs (Oracle Cloud Always Free Tier):**
+- Ampere A1 Compute (4 OCPU, 24GB RAM): $0
+- Block Storage (100GB): $0
+- Data Transfer (up to 10TB): $0
+- Load Balancers: $0 (using NodePort)
+- **Total: $0/month** 🎉
 
-**Cost Optimization:**
-- Use Spot Instance (60-70% cheaper, with interruption risk)
-- Implement idle server auto-shutdown
+**Comparison with AWS (Original Plan):**
+| Resource | AWS Cost | Oracle Cloud |
+|----------|----------|--------------|
+| Compute | $60/month (t3.large: 2 vCPU, 8GB) | $0 (3 OCPU, 16GB) |
+| Storage | $8/month (100GB gp3) | $0 (100GB) |
+| Data Transfer | $5/month | $0 |
+| **Total** | **$73/month** | **$0/month** |
+
+**Oracle Cloud Provides More for Free:**
+- 2x more RAM (16GB vs 8GB)
+- 1.5x more CPU (3 OCPU vs 2 vCPU)
+- 2x more storage available (200GB vs 100GB)
 
 ---
 
 ## Key Design Decisions (Revised)
 
-### 1. Networking: NodePort vs LoadBalancer
+### 1. Cloud Provider: Oracle Cloud vs AWS
+- **Chosen:** Oracle Cloud Infrastructure (OCI)
+- **Why:** Always Free Tier provides 4 OCPU + 24GB RAM + 200GB storage at $0/month
+- **Trade-off:** ARM64 architecture requires multi-arch Docker builds; smaller ecosystem than AWS
+
+### 2. Networking: NodePort vs LoadBalancer
 - **Chosen:** NodePort
 - **Why:** Massive cost savings ($0 vs $225/mo). Sufficient for small scale.
 - **Trade-off:** Non-standard ports (e.g., :30001) for users.
 
-### 2. Storage: HostPath (Local) vs EBS
+### 3. Storage: HostPath (Local) vs Cloud Block Storage
 - **Chosen:** Local Path (K3s default)
-- **Why:** Simpler, faster, no AWS volume attachment limits (max ~25 attachments per instance).
-- **Trade-off:** Data is tied to this specific EC2 instance (fine for single-node).
+- **Why:** Simpler, faster, included in Always Free block storage.
+- **Trade-off:** Data is tied to this specific instance (fine for single-node).
 
-### 3. Safety: Strict Limits & Pre-flight Checks
+### 4. Safety: Strict Limits & Pre-flight Checks
 - **Chosen:** CLI-side capacity checking
 - **Why:** Prevents "noisy neighbors" from crashing the shared node via OOM (Out of Memory).
 
-### 4. Authentication: ServiceAccount Tokens vs Client Certificates
+### 5. Authentication: ServiceAccount Tokens vs Client Certificates
 - **Chosen:** ServiceAccount tokens (long-lived, 5 years)
 - **Why:** Easier to automate in registration service. No certificate signing infrastructure needed.
 - **Trade-off:** Token acts like a permanent password (must be kept secure). If lost, admin intervention required.
+
+### 6. CPU Architecture: ARM64 (Ampere) vs x86
+- **Chosen:** ARM64 (Ampere A1)
+- **Why:** Only way to get Always Free compute on Oracle Cloud
+- **Trade-off:** Must build multi-arch Docker images; some software may not support ARM64
+- **Mitigation:** Java and K3s fully support ARM64; Docker buildx handles multi-arch builds
