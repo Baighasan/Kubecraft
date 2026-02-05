@@ -8,6 +8,7 @@ import (
 
 	"github.com/baighasan/kubecraft/internal/config"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -191,6 +192,7 @@ func TestCreateResourceQuota_Success(t *testing.T) {
 	}
 
 	// Verify limits match config constants (optimized for Oracle Cloud A1)
+	// Use Quantity comparison to handle K8s normalization (e.g., 1000m -> 1)
 	expectedLimits := map[string]string{
 		"requests.cpu":           config.ServerCPURequest,
 		"requests.memory":        config.ServerMemoryRequest,
@@ -206,9 +208,9 @@ func TestCreateResourceQuota_Success(t *testing.T) {
 			continue
 		}
 
-		actualValue := actualQuantity.String()
-		if actualValue != expectedValue {
-			t.Errorf("ResourceQuota %q = %q, want %q", resourceName, actualValue, expectedValue)
+		expectedQuantity := resource.MustParse(expectedValue)
+		if actualQuantity.Cmp(expectedQuantity) != 0 {
+			t.Errorf("ResourceQuota %q = %v, want %v", resourceName, actualQuantity.String(), expectedValue)
 		}
 	}
 }
