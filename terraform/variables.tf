@@ -53,3 +53,9 @@ variable "node_port_max" {
   type        = number
   default     = 30099
 }
+
+variable "ad_number" {
+  description = "Availability domain number (1-3)"
+  type        = number
+  default     = 1
+}

@@ -19,14 +19,14 @@ provider "oci" {
 
 data "oci_identity_availability_domain" "ad" {
   compartment_id  = var.tenancy_ocid
-  ad_number       = 2
+  ad_number       = var.ad_number
 }
 
 data "oci_core_images" "ubuntu_arm" {
   compartment_id           = var.compartment_ocid
   operating_system         = "Canonical Ubuntu"
   operating_system_version = "22.04"
-  shape                    = "VM.Standard.A2.Flex"
+  shape                    = "VM.Standard.A1.Flex"
   sort_by                  = "TIMECREATED"
   sort_order               = "DESC"
 }
