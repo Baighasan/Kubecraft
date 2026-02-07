@@ -1,0 +1,9 @@
+#cloud-config
+
+package_update: true
+package_upgrade: true
+
+runcmd:
+  - curl -sfL https://get.k3s.io | sh -
+  - until kubectl get nodes; do sleep 5; done
+  - (crontab -l 2>/dev/null; echo "*/5 * * * * /usr/bin/curl -s http://localhost:6443 > /dev/null") | crontab -
