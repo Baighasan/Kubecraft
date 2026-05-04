@@ -5,8 +5,8 @@ resource "oci_core_instance" "kc_instance" {
   shape = "VM.Standard.A1.Flex"
 
   shape_config {
-    ocpus = 4
-    memory_in_gbs = 24
+    ocpus = 3
+    memory_in_gbs = 16
   }
 
   source_details {

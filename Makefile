@@ -31,6 +31,7 @@ cluster-up:
 
 cluster-setup:
 	kubectl apply -f manifests/system-templates/
+	kubectl apply -f manifests/registration-templates/registration-namespace.yaml
 	kubectl apply -f manifests/registration-templates/
 
 cluster-down:
