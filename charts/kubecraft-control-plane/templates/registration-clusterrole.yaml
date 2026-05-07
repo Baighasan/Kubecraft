@@ -18,7 +18,7 @@ rules:
   resources: [ "pods" ]
   verbs: [ "get", "list" ]
 - apiGroups: [ "" ]
-  resources: [ "pods/logs" ]
+  resources: [ "pods/log" ]
   verbs: [ "get" ]
 - apiGroups: [ "apps" ]
   resources: [ "statefulsets" ]
@@ -37,7 +37,7 @@ rules:
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["clusterrolebindings"]
   verbs: ["get", "update", "patch"]
-  resourceNames: ["kc-users-capacity-check"]
+  resourceNames: ["{{ .Values.rbac.capacityChecker.bindingName }}"]
 # Create resource quotas
 - apiGroups: [""]
   resources: ["resourcequotas"]

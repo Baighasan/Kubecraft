@@ -33,10 +33,11 @@ const (
 
 // RBAC Resource Names
 const (
-	UserRoleName               = "minecraft-manager"
-	CapacityCheckerClusterRole = "kc-capacity-checker"
-	CapacityCheckerBinding     = "kc-users-capacity-check"
-	RegistrationClusterRole    = "kc-registration-admin"
+	UserRoleName                   = "minecraft-manager"
+	CapacityCheckerClusterRole     = "kc-capacity-checker"
+	CapacityCheckerBinding         = "kc-users-capacity-check"
+	RegistrationClusterRole        = "kc-registration-admin"
+	RegistrationClusterRoleBinding = "kc-registration-admin-binding"
 )
 
 // Resource Limits (per server) - Optimized for Oracle Cloud (16GB RAM, 3 OCPU)

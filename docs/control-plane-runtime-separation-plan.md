@@ -445,7 +445,7 @@ helm template kubecraft-control-plane ./charts/kubecraft-control-plane | kubectl
 Keep/extend integration tests:
 
 ```bash
-go test -v -race -tags=integration ./internal/...
+go test -v -race -p 1 -tags=integration ./internal/...
 ```
 
 Use control-plane install before dynamic tests:
@@ -503,17 +503,21 @@ At registration service startup, verify the following exist and fail fast if mis
 - [x] Add ownership model to `CLAUDE.md`
 - [x] Add ownership model to `README.md`
 - [x] Add ownership model to `TESTING.md`
-- [ ] Normalize `kc-*` constants in Go (`internal/config/constants.go`)
-- [ ] Update Go tests expecting old names (`internal/config/constants_test.go`)
-- [ ] Align integration workflow bootstrap RBAC (`.github/workflows/test-integration.yml`)
-- [ ] Update `Makefile` `cluster-setup` to use Helm only
-- [ ] Remove/update script references in docs (`test-manifests.sh`, `test-rbac.sh`, `apply-system-rbac.sh`)
-- [ ] Add Helm lint/render validation to CI (`.github/workflows/test-manifests.yml`)
-- [ ] Deprecate `scripts/create-user.sh` and `scripts/delete-user.sh` from operational paths
-- [ ] Deprecate `scripts/apply-system-rbac.sh` from operational paths
-- [ ] Mark `manifests/user-templates` and `manifests/server-templates` as reference-only
-- [ ] Remove `manifests/system-templates` and `manifests/registration-templates` from repo
-- [ ] Run full test suite and verify green
+- [x] Normalize `kc-*` constants in Go (`internal/config/constants.go`)
+- [x] Update Go tests expecting old names (`internal/config/constants_test.go`)
+- [x] Align integration workflow bootstrap RBAC (`.github/workflows/test-integration.yml`)
+- [x] Update `Makefile` `cluster-setup` to use Helm only
+- [x] Remove/update script references in docs (`test-manifests.sh`, `test-rbac.sh`, `apply-system-rbac.sh`)
+- [x] Add Helm lint/render validation to CI (`.github/workflows/test-manifests.yml`)
+- [x] Deprecate `scripts/create-user.sh` and `scripts/delete-user.sh` from operational paths
+- [x] Deprecate `scripts/apply-system-rbac.sh` from operational paths
+- [x] Mark `manifests/user-templates` and `manifests/server-templates` as reference-only
+- [x] Remove `manifests/system-templates` and `manifests/registration-templates` from repo
+- [x] Add startup fail-fast validation for required control-plane RBAC
+- [x] Fix `pods/logs` typo → `pods/log` in Helm chart and Go runtime Role
+- [x] Run full test suite and verify green
+
+> **Temporary Mitigation:** Integration tests are run serially (`go test -p 1 -tags=integration ./internal/...`) to avoid concurrent `ClusterRoleBinding` mutation conflicts. This is a short-term guard until conflict-safe update logic is implemented in the runtime code.
 
 ## Definition of Done
 

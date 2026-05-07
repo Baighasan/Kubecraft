@@ -46,8 +46,10 @@ helm template kubecraft-control-plane ./charts/kubecraft-control-plane | kubectl
 
 **Go integration tests:**
 ```bash
-go test -tags=integration ./internal/...
+go test -p 1 -tags=integration ./internal/...
 ```
+
+> **Note:** Integration tests currently run with `-p 1` (serial package execution) as a temporary mitigation to avoid concurrent `ClusterRoleBinding` mutation conflicts. This will be removed once conflict-safe update logic is implemented.
 
 ## Prerequisites
 
@@ -122,7 +124,7 @@ helm template kubecraft-control-plane ./charts/kubecraft-control-plane | kubectl
 
 **Run:**
 ```bash
-go test -tags=integration ./internal/...
+go test -p 1 -tags=integration ./internal/...
 ```
 
 ### 3. Master Test Suite (`test-all.sh`)
@@ -212,7 +214,7 @@ kubectl delete clusterrolebinding kc-users-capacity-check --ignore-not-found
 helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
 
 # Then run tests
-go test -tags=integration ./internal/...
+go test -p 1 -tags=integration ./internal/...
 ```
 
 ## Test Development
@@ -355,7 +357,7 @@ This runs only tests WITHOUT the `integration` build tag:
 ### Run All Tests Including Integration (Requires Cluster)
 
 ```bash
-go test -v -tags=integration ./internal/...
+go test -v -p 1 -tags=integration ./internal/...
 ```
 
 This runs ALL tests (unit + integration).
@@ -415,7 +417,7 @@ go test -v ./internal/...
 
 **Run:**
 ```bash
-go test -v -tags=integration ./internal/...
+go test -v -p 1 -tags=integration ./internal/...
 ```
 
 **Duration:** ~30-60 seconds (creates real resources)
@@ -457,7 +459,7 @@ Tests Kubernetes client initialization:
 
 **Example:**
 ```bash
-go test -v -tags=integration ./internal/k8s -run TestClient
+go test -v -p 1 -tags=integration ./internal/k8s -run TestClient
 ```
 
 ---
@@ -474,7 +476,7 @@ Tests namespace operations:
 
 **Example:**
 ```bash
-go test -v -tags=integration ./internal/k8s -run TestNamespace
+go test -v -p 1 -tags=integration ./internal/k8s -run TestNamespace
 ```
 
 ---
@@ -492,7 +494,7 @@ Tests RBAC resource creation:
 
 **Example:**
 ```bash
-go test -v -tags=integration ./internal/k8s -run TestRBAC
+go test -v -p 1 -tags=integration ./internal/k8s -run TestRBAC
 ```
 
 ---
@@ -508,7 +510,7 @@ Tests ServiceAccount token generation:
 
 **Example:**
 ```bash
-go test -v -tags=integration ./internal/k8s -run TestGenerateToken
+go test -v -p 1 -tags=integration ./internal/k8s -run TestGenerateToken
 ```
 
 ---
@@ -548,7 +550,7 @@ Tests registration HTTP handler:
 
 **Example:**
 ```bash
-go test -v -tags=integration ./internal/registration -run TestHandler
+go test -v -p 1 -tags=integration ./internal/registration -run TestHandler
 ```
 
 **Duration:** ~30-60 seconds (requires cluster + RBAC)
@@ -562,7 +564,7 @@ go test -v -tags=integration ./internal/registration -run TestHandler
 go test -v -coverprofile=coverage.out ./internal/config/... ./internal/registration/...
 
 # All tests coverage (requires cluster)
-go test -v -tags=integration -coverprofile=coverage.out \
+go test -v -p 1 -tags=integration -coverprofile=coverage.out \
   ./internal/config/... \
   ./internal/k8s/... \
   ./internal/registration/...
@@ -583,7 +585,7 @@ go tool cover -html=coverage.out
 go test -v -race ./internal/...
 
 # All tests with race detection (requires cluster)
-go test -v -race -tags=integration ./internal/...
+go test -v -race -p 1 -tags=integration ./internal/...
 ```
 
 ## CI/CD Integration
@@ -621,7 +623,7 @@ go test -v -race -coverprofile=coverage.out \
 
 **What it runs:**
 ```bash
-go test -v -race -tags=integration -coverprofile=coverage.out \
+go test -v -race -p 1 -tags=integration -coverprofile=coverage.out \
   ./internal/config/... \
   ./internal/k8s/... \
   ./internal/registration/...

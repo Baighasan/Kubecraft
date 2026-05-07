@@ -66,7 +66,7 @@ func (c *Client) CreateRole() error {
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"pods/logs"},
+				Resources: []string{"pods/log"},
 				Verbs:     []string{"get"},
 			},
 			{

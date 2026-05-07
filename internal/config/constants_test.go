@@ -65,6 +65,8 @@ func TestConstants_ResourceNames(t *testing.T) {
 		{"UserRoleName", UserRoleName, "minecraft-manager"},
 		{"CapacityCheckerClusterRole", CapacityCheckerClusterRole, "kc-capacity-checker"},
 		{"CapacityCheckerBinding", CapacityCheckerBinding, "kc-users-capacity-check"},
+		{"RegistrationClusterRole", RegistrationClusterRole, "kc-registration-admin"},
+		{"RegistrationClusterRoleBinding", RegistrationClusterRoleBinding, "kc-registration-admin-binding"},
 	}
 
 	for _, tt := range tests {

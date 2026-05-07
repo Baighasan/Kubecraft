@@ -118,7 +118,7 @@ Integration tests run against a local k3d cluster:
 
 ```bash
 make cluster-up && make cluster-setup
-go test -tags=integration ./internal/...
+go test -p 1 -tags=integration ./internal/...
 ```
 
 ---

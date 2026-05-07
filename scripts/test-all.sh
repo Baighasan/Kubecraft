@@ -36,14 +36,36 @@ else
     OVERALL_PASSED=false
 fi
 
+echo "Running helm template dry-run..."
+if helm template kubecraft-control-plane ./charts/kubecraft-control-plane | kubectl apply --dry-run=client -f -; then
+    echo -e "\n${GREEN}✓ Helm template dry-run passed${NC}"
+else
+    echo -e "\n${RED}✗ Helm template dry-run failed${NC}"
+    OVERALL_PASSED=false
+fi
+
 # ========================================
-# Phase 2: Go Integration Tests
+# Phase 2: Install control-plane chart
 # ========================================
 
-print_header "Phase 2: Go Integration Tests"
+print_header "Phase 2: Install Control-Plane Chart"
 
-echo "Running integration tests (requires cluster with Helm chart installed)..."
-if go test -v -race -tags=integration ./internal/...; then
+echo "Installing control-plane Helm chart..."
+if helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane; then
+    echo -e "\n${GREEN}✓ Control-plane chart installed${NC}"
+else
+    echo -e "\n${RED}✗ Control-plane chart installation failed${NC}"
+    OVERALL_PASSED=false
+fi
+
+# ========================================
+# Phase 3: Go Integration Tests
+# ========================================
+
+print_header "Phase 3: Go Integration Tests"
+
+echo "Running integration tests..."
+if go test -v -race -p 1 -tags=integration ./internal/...; then
     echo -e "\n${GREEN}✓ Integration tests passed${NC}"
 else
     echo -e "\n${RED}✗ Integration tests failed${NC}"

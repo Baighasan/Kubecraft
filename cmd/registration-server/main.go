@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,6 +15,12 @@ func main() {
 	k8sClient, err := k8s.NewInClusterClient()
 	if err != nil {
 		fmt.Printf("failed to create k8s client: %s\n", err)
+		os.Exit(1)
+	}
+
+	// Fail fast if static control-plane RBAC is missing
+	if err := k8sClient.ValidateControlPlaneRBAC(context.Background()); err != nil {
+		fmt.Printf("control-plane validation failed: %s\n", err)
 		os.Exit(1)
 	}
 

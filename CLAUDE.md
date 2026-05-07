@@ -119,7 +119,7 @@ make build-prod   # OCI instance endpoint, TLS strict
 
 # Tests
 make test                                   # Unit tests only
-go test -tags=integration ./internal/...   # Integration tests (requires cluster)
+go test -p 1 -tags=integration ./internal/...   # Integration tests (requires cluster)
 
 # Local cluster
 make cluster-up     # k3d with NodePort mapping 30000-30099

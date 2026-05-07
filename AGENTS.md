@@ -14,7 +14,7 @@ No operational path should apply raw Kubernetes manifests for control-plane or d
 - Prod CLI build (must override placeholders):
   `make build-prod PROD_ENDPOINT=<host:6443> PROD_NODE_ADDRESS=<public-ip>`
 - Unit tests (subset only, no cluster needed): `make test`
-- Integration tests (real cluster required): `go test -tags=integration ./internal/...`
+- Integration tests (real cluster required): `go test -p 1 -tags=integration ./internal/...`
 - Single package: `go test ./internal/cli/server`
 - Single test: `go test ./internal/cli/server -run TestName`
 - Local k3d cluster:
@@ -24,7 +24,7 @@ No operational path should apply raw Kubernetes manifests for control-plane or d
   4. `make cluster-down`
 - Helm control-plane validation: `helm lint ./charts/kubecraft-control-plane`
 - Unit tests (subset only, no cluster needed): `make test`
-- Integration tests (real cluster required): `go test -tags=integration ./internal/...`
+- Integration tests (real cluster required): `go test -p 1 -tags=integration ./internal/...`
 - Full test suite: `./scripts/test-all.sh` (Helm lint + Go integration tests)
 
 ## Project shape
