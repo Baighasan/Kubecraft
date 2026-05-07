@@ -114,8 +114,9 @@ func cleanupTestClusterRoleBinding(t *testing.T, client *k8s.Client, username st
 	}
 }
 
-// ensureTestSystemRBAC ensures the system ClusterRole and ClusterRoleBinding exist
-func ensureTestSystemRBAC(t *testing.T, client *k8s.Client) {
+// requireSystemRBAC asserts that the system ClusterRole and ClusterRoleBinding exist.
+// Tests assume the control-plane Helm chart has been installed.
+func requireSystemRBAC(t *testing.T, client *k8s.Client) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -126,30 +127,7 @@ func ensureTestSystemRBAC(t *testing.T, client *k8s.Client) {
 		metav1.GetOptions{},
 	)
 	if err != nil {
-		clusterRole := &rbacv1.ClusterRole{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: config.CapacityCheckerClusterRole,
-				Labels: map[string]string{
-					config.CommonLabelKey: config.CommonLabelValue,
-				},
-			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{""},
-					Resources: []string{"namespaces", "services", "pods"},
-					Verbs:     []string{"get", "list"},
-				},
-			},
-		}
-
-		_, err = client.GetClientset().RbacV1().ClusterRoles().Create(
-			ctx,
-			clusterRole,
-			metav1.CreateOptions{},
-		)
-		if err != nil {
-			t.Fatalf("Failed to create ClusterRole: %v", err)
-		}
+		t.Fatalf("ClusterRole %s not found (install the Helm chart first): %v", config.CapacityCheckerClusterRole, err)
 	}
 
 	_, err = client.GetClientset().RbacV1().ClusterRoleBindings().Get(
@@ -158,28 +136,6 @@ func ensureTestSystemRBAC(t *testing.T, client *k8s.Client) {
 		metav1.GetOptions{},
 	)
 	if err != nil {
-		clusterRoleBinding := &rbacv1.ClusterRoleBinding{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: config.CapacityCheckerBinding,
-				Labels: map[string]string{
-					config.CommonLabelKey: config.CommonLabelValue,
-				},
-			},
-			RoleRef: rbacv1.RoleRef{
-				APIGroup: "rbac.authorization.k8s.io",
-				Kind:     "ClusterRole",
-				Name:     config.CapacityCheckerClusterRole,
-			},
-			Subjects: []rbacv1.Subject{},
-		}
-
-		_, err = client.GetClientset().RbacV1().ClusterRoleBindings().Create(
-			ctx,
-			clusterRoleBinding,
-			metav1.CreateOptions{},
-		)
-		if err != nil {
-			t.Fatalf("Failed to create ClusterRoleBinding: %v", err)
-		}
+		t.Fatalf("ClusterRoleBinding %s not found (install the Helm chart first): %v", config.CapacityCheckerBinding, err)
 	}
 }

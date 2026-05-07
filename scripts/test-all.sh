@@ -1,14 +1,12 @@
 #!/bin/bash
 
 # Master Test Script for Kubecraft
-# Runs all validation and functional tests
+# Runs Helm validation and Go integration tests
 
 set -euo pipefail
 
-# Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Colors
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
@@ -20,37 +18,35 @@ print_header() {
     echo -e "${CYAN}========================================${NC}\n"
 }
 
-# Track overall status
 OVERALL_PASSED=true
 
 print_header "Kubecraft Complete Test Suite"
 
-echo "Running all tests..."
-echo ""
-
 # ========================================
-# Phase 1: Manifest Validation
+# Phase 1: Helm Validation
 # ========================================
 
-print_header "Phase 1: Manifest Validation"
+print_header "Phase 1: Helm Validation"
 
-if "${SCRIPT_DIR}/test-manifests.sh"; then
-    echo -e "\n${GREEN}✓ Manifest tests passed${NC}"
+echo "Running helm lint..."
+if helm lint ./charts/kubecraft-control-plane; then
+    echo -e "\n${GREEN}✓ Helm lint passed${NC}"
 else
-    echo -e "\n${RED}✗ Manifest tests failed${NC}"
+    echo -e "\n${RED}✗ Helm lint failed${NC}"
     OVERALL_PASSED=false
 fi
 
 # ========================================
-# Phase 2: RBAC Functional Tests
+# Phase 2: Go Integration Tests
 # ========================================
 
-print_header "Phase 2: RBAC Functional Tests"
+print_header "Phase 2: Go Integration Tests"
 
-if "${SCRIPT_DIR}/test-rbac.sh"; then
-    echo -e "\n${GREEN}✓ RBAC tests passed${NC}"
+echo "Running integration tests (requires cluster with Helm chart installed)..."
+if go test -v -race -tags=integration ./internal/...; then
+    echo -e "\n${GREEN}✓ Integration tests passed${NC}"
 else
-    echo -e "\n${RED}✗ RBAC tests failed${NC}"
+    echo -e "\n${RED}✗ Integration tests failed${NC}"
     OVERALL_PASSED=false
 fi
 
@@ -65,10 +61,8 @@ if [ "$OVERALL_PASSED" = true ]; then
     echo -e "${GREEN}   ALL TEST SUITES PASSED! ✓${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo ""
-    echo "✓ Manifest validation passed"
-    echo "✓ RBAC functional tests passed"
-    echo ""
-    echo "Your Kubecraft setup is ready!"
+    echo "✓ Helm validation passed"
+    echo "✓ Integration tests passed"
     exit 0
 else
     echo -e "${RED}========================================${NC}"

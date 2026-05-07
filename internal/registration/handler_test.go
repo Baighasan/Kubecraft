@@ -108,7 +108,7 @@ func TestHandler_InvalidUsername(t *testing.T) {
 // Test successful registration
 func TestHandler_SuccessfulRegistration(t *testing.T) {
 	client := getTestClient(t)
-	ensureSystemRBAC(t, client) // Ensure ClusterRole/Binding exist
+	requireSystemRBAC(t, client) // Helm must be installed first
 	handler := NewRegistrationHandler(client)
 
 	username := uniqueUsername()
@@ -161,7 +161,7 @@ func TestHandler_SuccessfulRegistration(t *testing.T) {
 // Test duplicate username rejection
 func TestHandler_DuplicateUsername(t *testing.T) {
 	client := getTestClient(t)
-	ensureSystemRBAC(t, client)
+	requireSystemRBAC(t, client)
 	handler := NewRegistrationHandler(client)
 
 	username := uniqueUsername()
@@ -206,7 +206,7 @@ func TestHandler_DuplicateUsername(t *testing.T) {
 // Test JSON response format
 func TestHandler_ResponseFormat(t *testing.T) {
 	client := getTestClient(t)
-	ensureSystemRBAC(t, client)
+	requireSystemRBAC(t, client)
 	handler := NewRegistrationHandler(client)
 
 	username := uniqueUsername()
@@ -238,7 +238,7 @@ func TestHandler_ResponseFormat(t *testing.T) {
 // Test that all K8s resources are created
 func TestHandler_CreatesAllResources(t *testing.T) {
 	client := getTestClient(t)
-	ensureSystemRBAC(t, client)
+	requireSystemRBAC(t, client)
 	handler := NewRegistrationHandler(client)
 
 	username := uniqueUsername()

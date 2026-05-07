@@ -33,7 +33,7 @@ func TestRegisterIntegration_EndToEnd(t *testing.T) {
 	os.Setenv("KUBECONFIG", kubeconfig)
 
 	client := getIntegrationTestClient(t)
-	ensureTestSystemRBAC(t, client)
+	requireSystemRBAC(t, client)
 	handler := registration.NewRegistrationHandler(client)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +89,7 @@ func TestRegisterIntegration_DuplicateBlockedByConfig(t *testing.T) {
 	os.Setenv("KUBECONFIG", kubeconfig)
 
 	client := getIntegrationTestClient(t)
-	ensureTestSystemRBAC(t, client)
+	requireSystemRBAC(t, client)
 	handler := registration.NewRegistrationHandler(client)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +134,7 @@ func TestRegisterIntegration_ServerRejectsDuplicate(t *testing.T) {
 	os.Setenv("KUBECONFIG", kubeconfig)
 
 	client := getIntegrationTestClient(t)
-	ensureTestSystemRBAC(t, client)
+	requireSystemRBAC(t, client)
 	handler := registration.NewRegistrationHandler(client)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -222,7 +222,7 @@ func TestRegisterIntegration_TokenIsValid(t *testing.T) {
 	os.Setenv("KUBECONFIG", kubeconfig)
 
 	client := getIntegrationTestClient(t)
-	ensureTestSystemRBAC(t, client)
+	requireSystemRBAC(t, client)
 
 	handler := registration.NewRegistrationHandler(client)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

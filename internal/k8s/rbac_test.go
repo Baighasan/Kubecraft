@@ -221,8 +221,8 @@ func TestAddUserToCapacityChecker_Success(t *testing.T) {
 	defer CleanupNamespace(t, client, username)
 	defer CleanupClusterRoleBinding(t, client, username)
 
-	// Ensure system RBAC exists
-	EnsureSystemRBAC(t, client)
+	// Require system RBAC (installed by Helm)
+	RequireSystemRBAC(t, client)
 
 	// Create namespace and ServiceAccount first
 	err := client.CreateNamespace(username)
@@ -288,8 +288,8 @@ func TestAddUserToCapacityChecker_Duplicate(t *testing.T) {
 	defer CleanupNamespace(t, client, username)
 	defer CleanupClusterRoleBinding(t, client, username)
 
-	// Ensure system RBAC exists
-	EnsureSystemRBAC(t, client)
+	// Require system RBAC (installed by Helm)
+	RequireSystemRBAC(t, client)
 
 	// Create namespace and ServiceAccount
 	err := client.CreateNamespace(username)
