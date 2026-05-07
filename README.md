@@ -109,8 +109,7 @@ cd terraform && terraform init && terraform apply
 make build-prod
 
 # Apply system manifests to the cluster
-kubectl apply -f manifests/system-templates/
-kubectl apply -f manifests/registration-templates/
+helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
 ```
 
 Integration tests run against a local k3d cluster:

@@ -54,7 +54,7 @@ jobs:
           apiVersion: rbac.authorization.k8s.io/v1
           kind: ClusterRole
           metadata:
-            name: kubecraft-capacity-checker
+            name: kc-capacity-checker
             labels:
               app: kubecraft
           rules:
@@ -71,14 +71,14 @@ jobs:
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: ClusterRole
-            name: kubecraft-capacity-checker
+            name: kc-capacity-checker
           subjects: []
           EOF
 
       - name: Verify cluster is accessible
         run: |
           kubectl cluster-info
-          kubectl get clusterrole kubecraft-capacity-checker
+          kubectl get clusterrole kc-capacity-checker
 
       - name: Run integration tests
         run: |

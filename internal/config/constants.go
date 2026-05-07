@@ -34,7 +34,7 @@ const (
 // RBAC Resource Names
 const (
 	UserRoleName               = "minecraft-manager"
-	CapacityCheckerClusterRole = "kubecraft-capacity-checker"
+	CapacityCheckerClusterRole = "kc-capacity-checker"
 	CapacityCheckerBinding     = "kc-users-capacity-check"
 	RegistrationClusterRole    = "kc-registration-admin"
 )

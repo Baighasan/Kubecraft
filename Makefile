@@ -30,9 +30,7 @@ cluster-up:
 	k3d cluster create kubecraft-dev --port "30000-30099:30000-30099@server:0"
 
 cluster-setup:
-	kubectl apply -f manifests/system-templates/
-	kubectl apply -f manifests/registration-templates/registration-namespace.yaml
-	kubectl apply -f manifests/registration-templates/
+	helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
 
 cluster-down:
 	k3d cluster delete kubecraft-dev

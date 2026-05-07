@@ -1,0 +1,32 @@
+namespace:
+  name: kubecraft-system
+
+registration:
+  name: registration-service
+  serviceAccountName: registration-service
+  image:
+    repository: hasanbaig786/kubecraft-registration
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  maxUsers: 15
+  service:
+    type: NodePort
+    port: 8080
+    targetPort: 8080
+    nodePort: 30099
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+rbac:
+  capacityChecker:
+    clusterRoleName: kc-capacity-checker
+    bindingName: kc-users-capacity-check
+  registrationAdmin:
+    clusterRoleName: kc-registration-admin
+    bindingName: kc-registration-admin-binding

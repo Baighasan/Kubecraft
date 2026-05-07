@@ -63,7 +63,7 @@ func TestConstants_ResourceNames(t *testing.T) {
 		{"NamespacePrefix", NamespacePrefix, "mc-"},
 		{"SystemNamespace", SystemNamespace, "kubecraft-system"},
 		{"UserRoleName", UserRoleName, "minecraft-manager"},
-		{"CapacityCheckerClusterRole", CapacityCheckerClusterRole, "kubecraft-capacity-checker"},
+		{"CapacityCheckerClusterRole", CapacityCheckerClusterRole, "kc-capacity-checker"},
 		{"CapacityCheckerBinding", CapacityCheckerBinding, "kc-users-capacity-check"},
 	}
 
