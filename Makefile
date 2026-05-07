@@ -29,10 +29,10 @@ clean:
 	rm -f $(BINARY)
 
 cluster-up:
-	k3d cluster create kubecraft-dev --port "30000-30099:30000-30099@server:0"
+	k3d cluster create kubecraft-dev --api-port 0.0.0.0:43835 --port "30000-30099:30000-30099@server:0"
 
-cluster-setup:
-	helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
+cluster-setup-dev:
+	helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane --set registration.image.tag=dev
 
 cluster-down:
 	k3d cluster delete kubecraft-dev
