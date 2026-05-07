@@ -8,6 +8,11 @@ Self-service Minecraft server hosting platform. Users create, manage, and connec
 
 ## Architecture
 
+**Ownership boundary:**
+- Terraform owns infrastructure lifecycle.
+- Helm owns static control-plane Kubernetes resources.
+- Go code owns dynamic tenant and server runtime resources.
+
 **Single-node K3s cluster on Oracle Cloud:**
 - One Ampere instance (VM.Standard.A1.Flex) provisioned by Terraform
 - K3s handles orchestration; Terraform handles OCI infra
@@ -75,12 +80,15 @@ internal/
         ├── stop.go     # Scale StatefulSet 1→0 (PVC preserved)
         └── delete.go   # Confirmation prompt → delete StatefulSet + Service + PVC
 
-manifests/
-├── user-templates/         # namespace, serviceaccount, role, rolebinding, resourcequota
-├── server-templates/       # statefulset, service (NodePort)
-├── registration-templates/ # namespace, serviceaccount, clusterrole, clusterrolebinding,
+charts/kubecraft-control-plane/  # Helm chart for static control-plane resources
+├── templates/              # namespace, serviceaccount, clusterrole, clusterrolebinding,
 │                           #   deployment, service
-└── system-templates/       # clusterrole + clusterrolebinding for capacity checking
+├── values.yaml             # tunable config (image, NodePort, RBAC names)
+└── Chart.yaml              # chart metadata
+
+manifests/
+├── user-templates/         # reference-only (dynamic resources created by Go code)
+└── server-templates/       # reference-only (dynamic resources created by Go code)
 
 docker/
 ├── minecraft/Dockerfile    # eclipse-temurin:21-jre-jammy, non-root, /data volume
@@ -119,7 +127,7 @@ go test -tags=integration ./internal/...   # Integration tests (requires cluster
 
 # Local cluster
 make cluster-up     # k3d with NodePort mapping 30000-30099
-make cluster-setup  # Apply system RBAC + registration templates
+make cluster-setup  # Install control-plane Helm chart
 make cluster-down   # Tear down k3d cluster
 ```
 
@@ -160,6 +168,6 @@ make cluster-down   # Tear down k3d cluster
 
 - Push multi-arch Docker images in CI (currently only builds, doesn't push)
 - CLI release binaries in GitHub Actions (`cli-release.yml` not yet implemented)
-- Admin user cleanup script (`scripts/delete-user.sh`)
+- Admin user cleanup via CLI/API (runtime code path)
 - Update README with quick-start guide for end users
 - Optional: `kubecraft config export/import` for multi-computer convenience

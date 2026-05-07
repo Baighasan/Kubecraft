@@ -5,6 +5,9 @@ metadata:
   labels:
     app: kubecraft
     component: rbac
+  annotations:
+    description: "Binds the clusterrole to multiple users"
+# subjects are added dynamically via cli
 subjects: []
 roleRef:
   kind: ClusterRole

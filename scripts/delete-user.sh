@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#! DEPRECATED - USE CLI OR API
+
 # Exit on errors
 set -euo pipefail
 

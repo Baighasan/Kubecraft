@@ -497,6 +497,24 @@ At registration service startup, verify the following exist and fail fast if mis
 
 ---
 
+## Phase 1 Tracking Checklist (Lock the Boundary)
+
+- [x] Add ownership model to `AGENTS.md`
+- [x] Add ownership model to `CLAUDE.md`
+- [x] Add ownership model to `README.md`
+- [x] Add ownership model to `TESTING.md`
+- [ ] Normalize `kc-*` constants in Go (`internal/config/constants.go`)
+- [ ] Update Go tests expecting old names (`internal/config/constants_test.go`)
+- [ ] Align integration workflow bootstrap RBAC (`.github/workflows/test-integration.yml`)
+- [ ] Update `Makefile` `cluster-setup` to use Helm only
+- [ ] Remove/update script references in docs (`test-manifests.sh`, `test-rbac.sh`, `apply-system-rbac.sh`)
+- [ ] Add Helm lint/render validation to CI (`.github/workflows/test-manifests.yml`)
+- [ ] Deprecate `scripts/create-user.sh` and `scripts/delete-user.sh` from operational paths
+- [ ] Deprecate `scripts/apply-system-rbac.sh` from operational paths
+- [ ] Mark `manifests/user-templates` and `manifests/server-templates` as reference-only
+- [ ] Remove `manifests/system-templates` and `manifests/registration-templates` from repo
+- [ ] Run full test suite and verify green
+
 ## Definition of Done
 
 - All cluster-scoped and registration bootstrap resources are deployed only via Helm chart.

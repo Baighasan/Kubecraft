@@ -10,6 +10,8 @@ The platform runs on a single Oracle Cloud Ampere instance (ARM64) at $0/month u
 
 ## Architecture
 
+**Ownership:** Terraform provisions infrastructure, Helm manages static control-plane resources, and Go code creates dynamic tenant/server resources at runtime.
+
 ```
   User's Machine                        Oracle Cloud (OCI)
   ─────────────                         ──────────────────────────────────────────────
@@ -91,10 +93,11 @@ internal/
   registration/             # HTTP handler + username validation
   config/                   # Constants, config file management
   cli/                      # Cobra command implementations
-manifests/                  # Kubernetes YAML templates
-docker/                     # Dockerfiles for Minecraft server + registration service
-terraform/                  # OCI infrastructure as code
-.github/workflows/          # CI: unit tests, integration tests, image builds
+charts/kubecraft-control-plane/  # Helm chart for static control-plane resources
+manifests/                       # Reference-only YAML templates (not applied)
+docker/                          # Dockerfiles for Minecraft server + registration service
+terraform/                       # OCI infrastructure as code
+.github/workflows/               # CI: unit tests, integration tests, image builds
 ```
 
 ---
@@ -108,7 +111,7 @@ cd terraform && terraform init && terraform apply
 # Build CLI pointed at the new instance
 make build-prod
 
-# Apply system manifests to the cluster
+# Install static control-plane resources (Helm-owned)
 helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
 ```
 

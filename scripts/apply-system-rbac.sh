@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#! DEPRECATED - HELM CHART HANDLES THIS
+
 # Exit on errors
 set -euo pipefail
 

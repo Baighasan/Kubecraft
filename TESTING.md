@@ -1,20 +1,28 @@
 # Kubecraft Testing Guide
 
-This document explains how to run tests for the Kubecraft project, including manifest validation and RBAC functional tests.
+This document explains how to run tests for the Kubecraft project.
+
+**Ownership boundary:**
+- Helm owns static control-plane Kubernetes resources.
+- Go code owns dynamic tenant and server runtime resources.
+- Tests must reflect this split: validate Helm charts for static resources, and use Go integration tests for dynamic behavior.
 
 ## Test Structure
 
 ```
-tests/
-└── scripts/
-    ├── test-manifests.sh    # Validates YAML syntax and Kubernetes compliance
-    ├── test-rbac.sh         # Tests RBAC permissions and namespace isolation
-    └── test-all.sh          # Runs all tests in sequence
+charts/kubecraft-control-plane/
+├── templates/               # Static control-plane Kubernetes resources
+├── values.yaml              # Tunable configuration
+└── Chart.yaml               # Chart metadata
 
-scripts/                     # Helper scripts (used by tests)
-├── create-user.sh           # Helper: Creates test users
-├── delete-user.sh           # Helper: Deletes test users
-└── apply-system-rbac.sh     # Helper: Applies cluster-wide RBAC
+scripts/                     # Test and helper scripts
+├── test-all.sh              # Runs all tests in sequence
+└── (legacy scripts pending migration)
+
+.github/workflows/
+├── test-unit.yml            # Unit tests (no cluster needed)
+├── test-integration.yml     # Integration tests with k3d cluster
+└── test-manifests.yml       # Helm lint + render validation
 ```
 
 ## Quick Start
@@ -26,19 +34,20 @@ scripts/                     # Helper scripts (used by tests)
 ```
 
 This will run:
-1. Manifest validation tests
-2. RBAC functional tests
+1. Helm chart validation (lint + render)
+2. Go integration tests
 
 ### Run Individual Test Suites
 
-**Manifest validation only:**
+**Helm chart validation:**
 ```bash
-./scripts/test-manifests.sh
+helm lint ./charts/kubecraft-control-plane
+helm template kubecraft-control-plane ./charts/kubecraft-control-plane | kubectl apply --dry-run=client -f -
 ```
 
-**RBAC functional tests only:**
+**Go integration tests:**
 ```bash
-./scripts/test-rbac.sh
+go test -tags=integration ./internal/...
 ```
 
 ## Prerequisites
@@ -63,6 +72,9 @@ curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 
 # Create test cluster
 k3d cluster create kubecraft-test --agents 1
+
+# Install static control-plane resources
+helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
 
 # Verify cluster is ready
 kubectl get nodes
@@ -221,64 +233,57 @@ kubectl delete clusterrolebinding kc-users-capacity-check --ignore-not-found
 
 ### Issue: "ClusterRoleBinding not found" in RBAC tests
 
-**Cause:** System RBAC not applied before running tests
+**Cause:** Control-plane Helm chart not installed before running tests
 
 **Fix:**
 ```bash
-# Apply system RBAC first
-./scripts/apply-system-rbac.sh
+# Install control-plane chart first
+helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
 
 # Then run tests
-./scripts/test-rbac.sh
+go test -tags=integration ./internal/...
 ```
 
 ## Test Development
 
-### Adding New Manifest Tests
+### Adding Helm Chart Tests
 
-Edit `scripts/test-manifests.sh` and add tests using these functions:
+Add validation to CI or local scripts:
 
 ```bash
-# Validate static manifest
-validate_manifest \
-    "${MANIFEST_DIR}/path/to/manifest.yaml" \
-    "Description of what you're testing"
+# Lint the chart
+helm lint ./charts/kubecraft-control-plane
 
-# Validate templated manifest
-validate_templated_manifest \
-    "${MANIFEST_DIR}/path/to/template.yaml" \
-    "Description" \
-    "username" \
-    "servername"
+# Render and dry-run against cluster
+helm template kubecraft-control-plane ./charts/kubecraft-control-plane | kubectl apply --dry-run=client -f -
 
-# Check if field exists
-check_field_exists \
-    "${MANIFEST_DIR}/path/to/manifest.yaml" \
-    "field: value" \
-    "Description"
+# Verify specific templates
+helm template kubecraft-control-plane ./charts/kubecraft-control-plane | grep -A 5 "kind: ClusterRole"
 ```
 
-### Adding New RBAC Tests
+### Adding Go Integration Tests
 
-Edit `scripts/test-rbac.sh` and add tests using:
+Write tests in the relevant `internal/` package with the `integration` build tag:
 
-```bash
-# Test if user CAN do something
-test_result "User can do X" \
-    "pass" \
-    "kubectl auth can-i <verb> <resource> --as=system:serviceaccount:mc-$USER1:$USER1"
+```go
+//go:build integration
 
-# Test if user CANNOT do something
-test_result "User CANNOT do X" \
-    "fail" \
-    "kubectl auth can-i <verb> <resource> --as=system:serviceaccount:mc-$USER1:$USER1"
+package k8s
+
+func TestMyFeature(t *testing.T) {
+    client := GetTestClient(t)
+    username := UniqueUsername()
+    defer CleanupNamespace(t, client, username)
+
+    // Your test code here
+}
 ```
 
 ## Best Practices
 
-1. **Always run tests before committing manifest changes**
+1. **Always validate Helm charts before committing**
    ```bash
-   ./scripts/test-manifests.sh
+   helm lint ./charts/kubecraft-control-plane
    ```
 
 2. **Run full test suite before pushing**
@@ -290,8 +295,8 @@ test_result "User CANNOT do X" \
 
 4. **Clean up manually if tests fail mid-execution**
    ```bash
-   ./scripts/delete-user.sh alice
-   ./scripts/delete-user.sh bob
+   kubectl delete namespace mc-alice mc-bob --ignore-not-found
+   kubectl delete clusterrolebinding kc-users-capacity-check --ignore-not-found
    ```
 
 5. **Check CI results** before merging pull requests
@@ -399,10 +404,9 @@ No prerequisites - these run anywhere with Go installed.
    k3d cluster create go-test-cluster --agents 1
    ```
 
-2. **System RBAC applied**
+2. **Control-plane Helm chart installed**
    ```bash
-   kubectl apply -f manifests/system-templates/clusterrole.yaml
-   kubectl apply -f manifests/system-templates/clusterrolebinding.yaml
+   helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
    ```
 
 3. **KUBECONFIG set** (or use default `~/.kube/config`)
