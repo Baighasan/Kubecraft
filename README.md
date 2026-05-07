@@ -125,4 +125,6 @@ go test -p 1 -tags=integration ./internal/...
 
 ## Status
 
-Core implementation is complete. Waiting on Oracle Cloud capacity to provision the Ampere instance — running a polling script to claim one as it becomes available.
+Core implementation is complete. Static control-plane resources (namespace, RBAC, registration service) are managed by the Helm chart at `charts/kubecraft-control-plane/`. Dynamic tenant and server resources (namespaces, StatefulSets, Services, PVCs) are created exclusively by the Go runtime code. Legacy manifest templates have been removed.
+
+Waiting on Oracle Cloud capacity to provision the Ampere instance — running a polling script to claim one as it becomes available.
