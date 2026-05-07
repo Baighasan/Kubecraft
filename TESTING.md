@@ -15,14 +15,13 @@ charts/kubecraft-control-plane/
 ├── values.yaml              # Tunable configuration
 └── Chart.yaml               # Chart metadata
 
-scripts/                     # Test and helper scripts
-├── test-all.sh              # Runs all tests in sequence
-└── (legacy scripts pending migration)
+scripts/
+└── test-all.sh              # Helm lint + Go integration tests
 
 .github/workflows/
 ├── test-unit.yml            # Unit tests (no cluster needed)
-├── test-integration.yml     # Integration tests with k3d cluster
-└── test-manifests.yml       # Helm lint + render validation
+├── test-integration.yml     # Integration tests with k3d cluster (installs Helm chart)
+└── test-manifests.yml       # Helm lint + template dry-run
 ```
 
 ## Quick Start
@@ -91,72 +90,44 @@ kubectl get nodes
 
 ## Test Descriptions
 
-### 1. Manifest Validation (`test-manifests.sh`)
+### 1. Helm Chart Validation
 
 **What it tests:**
-- ✅ YAML syntax validation
-- ✅ Kubernetes API compliance (using `kubectl apply --dry-run`)
-- ✅ Template placeholder substitution (`{username}`, `{servername}`)
-- ✅ Required fields presence (labels, resource limits, ports)
-- ✅ Resource references (RoleBinding → Role, etc.)
-
-**Test phases:**
-1. **System Templates** - Registration service and cluster RBAC
-2. **User Templates** - Namespace, ServiceAccount, Role, RoleBinding, ResourceQuota
-3. **Server Templates** - StatefulSet and Service manifests
-4. **Required Fields** - Labels, image names, resource limits
-5. **Resource References** - RBAC references, naming consistency
-6. **Registration Config** - NodePort settings, environment variables
+- ✅ Helm chart syntax (`helm lint`)
+- ✅ Kubernetes API compliance (using `helm template | kubectl apply --dry-run=client`)
+- ✅ Template rendering correctness
 
 **Duration:** ~30 seconds
 
-**Output example:**
-```
-========================================
-Phase 1: System Templates
-========================================
-
->>> Testing Registration Service Manifests
-  [TEST] registration-namespace.yaml is valid ... ✓ PASS
-  [TEST] registration-serviceaccount.yaml is valid ... ✓ PASS
-  ...
-
-========================================
-Test Results Summary
-========================================
-Total Tests: 45
-Passed:      45
-Failed:      0
-
-   ALL TESTS PASSED! ✓
+**Run:**
+```bash
+helm lint ./charts/kubecraft-control-plane
+helm template kubecraft-control-plane ./charts/kubecraft-control-plane | kubectl apply --dry-run=client -f -
 ```
 
-### 2. RBAC Functional Tests (`test-rbac.sh`)
+### 2. Go Integration Tests
 
 **What it tests:**
-- ✅ Cluster-scoped permissions (capacity checking)
-- ✅ Namespace-scoped permissions (server management)
-- ✅ Namespace isolation (users can't access each other)
-- ✅ Actual server creation (StatefulSet, Service)
-- ✅ ResourceQuota enforcement
-- ✅ Security boundaries
+- ✅ Kubernetes client initialization
+- ✅ Namespace creation and management
+- ✅ RBAC resource creation (ServiceAccount, Role, RoleBinding, ResourceQuota)
+- ✅ ServiceAccount token generation
+- ✅ ClusterRoleBinding subject mutations (capacity checker)
+- ✅ Registration HTTP handler with real K8s resources
+- ✅ Server lifecycle (create, list, start, stop, delete)
 
-**Test phases:**
-1. **Setup** - Apply system RBAC, create test users (alice, bob)
-2. **Cluster-Scoped Permissions** - Verify users can list namespaces/services/pods
-3. **Namespace-Scoped Permissions** - Verify users can manage their own resources
-4. **Namespace Isolation** - Verify users cannot access each other's namespaces
-5. **Functional Tests** - Actually create a Minecraft server
-6. **ResourceQuota** - Verify compute limits are enforced
-7. **Security Boundaries** - Verify users cannot escalate privileges
+**Duration:** ~1-2 minutes (creates real resources and cleans up)
 
-**Duration:** ~1-2 minutes (includes resource creation and cleanup)
+**Important:** These tests create and delete resources in your cluster. They automatically clean up on exit.
 
-**Important:** This test creates and deletes resources in your cluster. It automatically cleans up on exit.
+**Run:**
+```bash
+go test -tags=integration ./internal/...
+```
 
 ### 3. Master Test Suite (`test-all.sh`)
 
-Runs both test suites in sequence and reports overall status.
+Runs Helm chart validation and Go integration tests in sequence and reports overall status.
 
 ## Understanding Test Results
 
@@ -190,9 +161,9 @@ Scroll up to see which specific tests failed. Each failed test shows:
 Tests run automatically in GitHub Actions on:
 - Push to `main` branch
 - Pull requests to `main` branch
-- Changes to `manifests/**` or test scripts
+- Changes to `charts/kubecraft-control-plane/**` or workflow files
 
-**Workflow file:** `.github/workflows/test-manifests.yml`
+**Workflow file:** `.github/workflows/test-manifests.yml` (Helm lint + template dry-run)
 
 **View results:** GitHub Actions tab in your repository
 
@@ -307,9 +278,7 @@ Current test coverage:
 
 | Component | Coverage | Notes |
 |-----------|----------|-------|
-| System RBAC manifests | 100% | All files validated |
-| User templates | 100% | All files validated |
-| Server templates | 100% | All files validated |
+| Helm chart validation | 100% | Lint + dry-run |
 | RBAC permissions | ~95% | Core permissions tested |
 | Namespace isolation | 100% | Cross-user access blocked |
 | Resource creation | 80% | Basic server creation tested |
@@ -679,12 +648,11 @@ k3d cluster create go-test-cluster
 
 ### Issue: "ClusterRole not found"
 
-**Cause:** System RBAC not applied
+**Cause:** Control-plane Helm chart not installed
 
 **Fix:**
 ```bash
-kubectl apply -f manifests/system-templates/clusterrole.yaml
-kubectl apply -f manifests/system-templates/clusterrolebinding.yaml
+helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
 ```
 
 ---
@@ -735,7 +703,7 @@ Test helper functions are defined in `*_test.go` files within each package:
 | `UniqueUsername()` | k8s | Generate unique test username |
 | `CleanupNamespace(t, client, username)` | k8s | Delete namespace and wait |
 | `CleanupClusterRoleBinding(t, client, username)` | k8s | Remove user from CRB |
-| `EnsureSystemRBAC(t, client)` | k8s | Create ClusterRole/Binding if missing |
+| `RequireSystemRBAC(t, client)` | k8s | Assert ClusterRole/Binding exist (Helm-installed) |
 | `WaitForServiceAccount(t, client, ns, name)` | k8s | Wait for SA to be ready |
 
 **Example usage:**

@@ -94,7 +94,6 @@ internal/
   config/                   # Constants, config file management
   cli/                      # Cobra command implementations
 charts/kubecraft-control-plane/  # Helm chart for static control-plane resources
-manifests/                       # Reference-only YAML templates (not applied)
 docker/                          # Dockerfiles for Minecraft server + registration service
 terraform/                       # OCI infrastructure as code
 .github/workflows/               # CI: unit tests, integration tests, image builds

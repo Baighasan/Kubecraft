@@ -86,10 +86,6 @@ charts/kubecraft-control-plane/  # Helm chart for static control-plane resources
 ├── values.yaml             # tunable config (image, NodePort, RBAC names)
 └── Chart.yaml              # chart metadata
 
-manifests/
-├── user-templates/         # reference-only (dynamic resources created by Go code)
-└── server-templates/       # reference-only (dynamic resources created by Go code)
-
 docker/
 ├── minecraft/Dockerfile    # eclipse-temurin:21-jre-jammy, non-root, /data volume
 ├── minecraft/start.sh      # Downloads PaperMC jar, G1GC flags, env var config
@@ -107,7 +103,7 @@ terraform/
 .github/workflows/
 ├── test-unit.yml          # Unit tests (no cluster needed)
 ├── test-integration.yml   # Integration tests with k3d cluster
-├── test-manifests.yml     # YAML validation + kubectl dry-run
+├── test-manifests.yml     # Helm lint + template dry-run
 ├── minecraft-image.yml    # Build Minecraft Docker image
 └── registration-image.yml # Build registration service Docker image
 ```

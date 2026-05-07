@@ -25,7 +25,7 @@ No operational path should apply raw Kubernetes manifests for control-plane or d
 - Helm control-plane validation: `helm lint ./charts/kubecraft-control-plane`
 - Unit tests (subset only, no cluster needed): `make test`
 - Integration tests (real cluster required): `go test -tags=integration ./internal/...`
-- Full test suite: `./scripts/test-all.sh`
+- Full test suite: `./scripts/test-all.sh` (Helm lint + Go integration tests)
 
 ## Project shape
 
@@ -37,7 +37,6 @@ No operational path should apply raw Kubernetes manifests for control-plane or d
 - `internal/registration` — `/register` handler and username validation
 - `internal/cli/server` — user-facing server commands (`create/list/start/stop/delete`)
 - `charts/kubecraft-control-plane` — Helm chart for static control-plane resources (registration service + system RBAC)
-- `manifests/user-templates`, `manifests/server-templates` — reference-only YAML (dynamic resources are created by Go code at runtime)
 
 ## Authentication model
 
