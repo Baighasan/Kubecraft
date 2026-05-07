@@ -10,6 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const serverImageEnvVar = "KUBECRAFT_SERVER_IMAGE"
+
+var serverImage string
+
 var createCmd = &cobra.Command{
 	Use:   "create <server-name>",
 	Args:  cobra.ExactArgs(1),
@@ -22,6 +26,11 @@ var createCmd = &cobra.Command{
 }
 
 func executeCreate(serverName string) error {
+	// Apply env var override if flag was not provided
+	if serverImage == "" {
+		serverImage = os.Getenv(serverImageEnvVar)
+	}
+
 	// Validate server name
 	if err := ValidateServerName(serverName); err != nil {
 		return fmt.Errorf("invalid server name: %w", err)
@@ -51,7 +60,7 @@ func executeCreate(serverName string) error {
 
 	// Create Minecraft server
 	fmt.Fprintf(os.Stderr, "Creating server %s...\n", serverName)
-	err = cli.K8sClient.CreateServer(serverName, cli.AppConfig.Username, port)
+	err = cli.K8sClient.CreateServer(serverName, cli.AppConfig.Username, port, serverImage)
 	if err != nil {
 		return fmt.Errorf("cannot create server: %w", err)
 	}
@@ -90,5 +99,6 @@ func ValidateServerName(name string) error {
 }
 
 func init() {
+	createCmd.Flags().StringVar(&serverImage, "server-image", "", "Minecraft server container image (default: "+config.ServerImage+")")
 	serverCmd.AddCommand(createCmd)
 }

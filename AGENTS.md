@@ -50,7 +50,9 @@ No operational path should apply raw Kubernetes manifests for control-plane or d
 - **NodePort range**: Minecraft servers use `30000-30015`; registration service is `30099`.
 - **Capacity guard**: hard-coded for a single-node OCI model (14 Gi usable RAM). Creation is rejected if free RAM would drop below 4 Gi.
 - **Server resources**: request 2 Gi / limit 4 Gi; 10 Gi PVC via `local-path` StorageClass.
-- **Build-time ldflags**: `ClusterEndpoint`, `NodeAddress`, `TLSInsecure` are injected at build time (`Makefile`). Do not rely on runtime env vars for these.
+- **Server image**: defaults to `ghcr.io/baighasan/kubecraft-minecraft`. Override with `--server-image` flag or `KUBECRAFT_SERVER_IMAGE` env var.
+- **Registration image**: defaults to `ghcr.io/baighasan/kubecraft-registration` via Helm values.
+- **Build-time ldflags**: `ClusterEndpoint`, `NodeAddress`, `TLSInsecure`, `ServerImage` are injected at build time (`Makefile`). Do not rely on runtime env vars for these.
 
 ## Gotchas
 

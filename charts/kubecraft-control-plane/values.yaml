@@ -5,7 +5,7 @@ registration:
   name: registration-service
   serviceAccountName: registration-service
   image:
-    repository: hasanbaig786/kubecraft-registration
+    repository: ghcr.io/baighasan/kubecraft-registration
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1

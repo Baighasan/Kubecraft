@@ -78,9 +78,31 @@ kubecraft server delete <name>         # remove StatefulSet + Service + PVC
 
 Before creating a server, the CLI sums memory requests across all running pods and rejects the request if headroom drops below 4GB — preventing OOM on the shared node.
 
+### Container Images
+
+All images are published to GitHub Container Registry (GHCR):
+
+| Image | Purpose |
+|-------|---------|
+| `ghcr.io/baighasan/kubecraft-minecraft` | Minecraft server runtime |
+| `ghcr.io/baighasan/kubecraft-registration` | Registration service |
+
+Images are public — no `imagePullSecrets` required.
+
+#### Tagging Policy
+
+| Event | Tag Produced | Example |
+|-------|-------------|---------|
+| Push to `dev` branch | `dev` | `ghcr.io/.../kubecraft-minecraft:dev` |
+| Pull Request | Build only (no push) | — |
+| Release (Git tag `v*`) | Exact version | `ghcr.io/.../kubecraft-minecraft:v0.1.0` |
+
+- `:dev` is mutable and overwritten on every `dev` branch push. Use it only for local development.
+- Production deployments should always pin to a release tag (`vX.Y.Z`).
+
 ### Minecraft Servers
 
-Each server is a StatefulSet backed by a 10Gi PVC for world persistence. The Docker image downloads the PaperMC jar at startup and is configured via environment variables (`VERSION`, `GAME_MODE`, `MAX_PLAYERS`, `JAVA_MEMORY`). Images are multi-arch (AMD64 + ARM64).
+Each server is a StatefulSet backed by a 10Gi PVC for world persistence. The container image downloads the PaperMC jar at startup and is configured via environment variables (`VERSION`, `GAME_MODE`, `MAX_PLAYERS`, `JAVA_MEMORY`). Images are built for `linux/amd64`.
 
 ---
 
@@ -101,6 +123,19 @@ terraform/                       # OCI infrastructure as code
 
 ---
 
+## Download CLI
+
+Pre-built binaries are available on [GitHub Releases](https://github.com/baighasan/kubecraft/releases).
+
+```bash
+# Download latest release (Linux AMD64 example)
+curl -LO https://github.com/baighasan/kubecraft/releases/latest/download/kubecraft-linux-amd64
+chmod +x kubecraft-linux-amd64
+mv kubecraft-linux-amd64 kubecraft
+```
+
+Each release includes binaries for `linux/darwin/windows` × `amd64/arm64` and a `checksums.txt` file.
+
 ## Deployment
 
 ```bash
@@ -113,6 +148,57 @@ make build-prod
 # Install static control-plane resources (Helm-owned)
 helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
 ```
+
+### Pinning Image Tags in Production
+
+Pin to a specific release tag rather than using `latest`:
+
+```bash
+helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane \
+  --set registration.image.tag=v0.1.0
+```
+
+## Dev Flow
+
+### Option A: Local build + k3d import (fastest)
+
+```bash
+# Build locally
+docker build -t kubecraft-minecraft:dev -f docker/minecraft/Dockerfile .
+k3d image import kubecraft-minecraft:dev -c kubecraft-dev
+
+# Create server with local image
+kubecraft server create myserver --server-image=kubecraft-minecraft:dev
+```
+
+### Option B: Use the `:dev` tag from GHCR
+
+Push to `dev` branch and CI publishes `:dev` tags automatically:
+
+```bash
+# Build the dev CLI (already defaults to :dev)
+make build-dev
+
+# Install control-plane with :dev tag
+helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane \
+  --set registration.image.tag=dev
+
+# Create server — the dev binary already points to :dev
+kubecraft server create myserver
+```
+
+You can also override at runtime:
+
+```bash
+# Via flag
+kubecraft server create myserver --server-image=ghcr.io/baighasan/kubecraft-minecraft:dev
+
+# Via env
+export KUBECRAFT_SERVER_IMAGE=ghcr.io/baighasan/kubecraft-minecraft:dev
+kubecraft server create myserver
+```
+
+## Integration Tests
 
 Integration tests run against a local k3d cluster:
 

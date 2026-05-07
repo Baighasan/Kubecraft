@@ -84,7 +84,10 @@ func (c *Client) AllocateNodePort() (int32, error) {
 	return 0, fmt.Errorf("no available ports found in range %d-%d", config.McNodePortRangeMin, config.McNodePortRangeMax)
 }
 
-func (c *Client) CreateServer(serverName string, username string, nodePort int32) error {
+func (c *Client) CreateServer(serverName string, username string, nodePort int32, serverImage string) error {
+	if serverImage == "" {
+		serverImage = config.ServerImage
+	}
 	// Define nodeport service
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -159,7 +162,7 @@ func (c *Client) CreateServer(serverName string, username string, nodePort int32
 					Containers: []corev1.Container{
 						{
 							Name:  config.CommonLabelValuePod,
-							Image: config.ServerImage,
+							Image: serverImage,
 							Env: []corev1.EnvVar{
 								{
 									Name:  "EULA",

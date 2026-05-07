@@ -67,6 +67,7 @@ var (
 	ClusterEndpoint = "localhost" // K8s API server address (host:port)
 	NodeAddress     = "localhost" // Public IP/hostname for Minecraft connections
 	TLSInsecure     = "false"
+	ServerImage     = "ghcr.io/baighasan/kubecraft-minecraft:latest"
 )
 
 // Token Configuration
@@ -79,7 +80,7 @@ const (
 const (
 	MinServerNameLength = 3
 	MaxServerNameLength = 16
-	ServerImage         = "hasanbaig786/kubecraft"
+
 	MinecraftPort       = 25565
 	ServerStorageSize   = "10Gi"
 	ServerStorageClass  = "local-path"
