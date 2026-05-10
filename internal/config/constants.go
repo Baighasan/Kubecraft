@@ -11,6 +11,7 @@ const (
 
 // Network Configuration
 const (
+	ClusterAPIPort          = 6443  // Cluster API port
 	RegistrationPort        = 8080  // Internal container port
 	RegistrationServicePort = 30099 // External NodePort for registration
 	McNodePortRangeMin      = 30000 // Start of Minecraft server NodePort range
@@ -81,11 +82,11 @@ const (
 	MinServerNameLength = 3
 	MaxServerNameLength = 16
 
-	MinecraftPort       = 25565
-	ServerStorageSize   = "10Gi"
-	ServerStorageClass  = "local-path"
-	CapacityThreshold   = 4096  // 4GB in MiB — minimum free RAM to allow creation (matches server limit)
-	TotalAvailableRAM   = 14336 // 14GB in MiB — total RAM for workloads (16GB - 2GB system overhead)
+	MinecraftPort      = 25565
+	ServerStorageSize  = "10Gi"
+	ServerStorageClass = "local-path"
+	CapacityThreshold  = 4096  // 4GB in MiB — minimum free RAM to allow creation (matches server limit)
+	TotalAvailableRAM  = 14336 // 14GB in MiB — total RAM for workloads (16GB - 2GB system overhead)
 )
 
 // Readiness Check

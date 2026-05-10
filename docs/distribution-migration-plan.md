@@ -1,6 +1,6 @@
 # Distribution Migration Plan: From Pre-configured Binary to BYO Cluster
 
-**Status:** Draft — awaiting implementation start  
+**Status:** Phase 1 complete — Phase 2 (Init Command) pending  
 **Goal:** Ship a single generic CLI artifact with no environment-specific endpoint/IP baked in, so users bring their own Kubernetes cluster.
 
 ---
@@ -89,41 +89,39 @@ Benefits:
 
 **Goal:** Define final command contract and error messaging before writing code.
 
-- [ ] Define final CLI UX contract:
-  - [ ] `kubecraft init --ip <x.x.x.x>` is required before `register`/server commands
-  - [ ] Runtime config stores: `clusterIP` (source), `clusterEndpoint` (derived), `registrationAddress` (derived), `nodeAddress` (derived), `tlsInsecure`, plus `username`/`token`
-- [ ] Decide strictness:
+- [x] Define final CLI UX contract:
+  - [x] `kubecraft init --ip <x.x.x.x>` is required before `register`/server commands
+  - [x] Runtime config stores: `clusterIP` (source), `tlsInsecure`, plus `username`/`token` (endpoints derived at runtime)
+- [x] Decide strictness:
   - [x] Fail hard if cluster config missing (confirmed)
-  - [ ] Allow command flags as one-off override (optional)
-- [ ] Freeze naming and YAML keys for config schema (to avoid churn later)
-- [ ] Write scope statement: "single public IP + fixed ports + NodePort model"
-- [ ] Document v1 cluster compatibility boundary
-- **Exit criteria:** one-pager spec approved before coding
+  - [ ] Allow command flags as one-off override (optional — deferred)
+- [x] Freeze naming and YAML keys for config schema (to avoid churn later)
+- [x] Write scope statement: "single public IP + fixed ports + NodePort model"
+- [x] Document v1 cluster compatibility boundary
+- **Exit criteria:** contract approved and implementation started
 
 ### Phase 1: Configuration Model Refactor
 
 **Targets:** `internal/config/config.go`, `internal/config/constants.go`, `internal/config/*test.go`
 
-- [ ] Extend `~/.kubecraft/config` schema:
-  - [ ] `clusterIP` (user-provided IP)
-  - [ ] `clusterEndpoint` (derived: `https://<ip>:6443`)
-  - [ ] `registrationAddress` (derived: `http://<ip>:30099`)
-  - [ ] `nodeAddress` (derived: `<ip>`)
-  - [ ] `tlsInsecure` (bool, persisted after probe)
-  - [ ] Keep `username` and `token`
-- [ ] Split validation by command context:
-  - [ ] `init` validation: IP format only
-  - [ ] `register` validation: cluster settings required
-  - [ ] `server *` validation: cluster settings + username/token required
-- [ ] Drop legacy compatibility requirements (explicitly accepted — no users yet)
-- [ ] Remove endpoint/IP/tls dependence from build-time constants:
-  - [ ] Stop treating `ClusterEndpoint`, `NodeAddress`, `TLSInsecure` as runtime source of truth
-  - [ ] Keep them as fallback defaults only
-- [ ] Update/add config tests for:
-  - [ ] load/save new schema
-  - [ ] validation failures and messages per command context
-  - [ ] derivation logic (IP → endpoint/address)
-- **Exit criteria:** config package tests pass with new schema
+- [x] Extend `~/.kubecraft/config` schema (minimal):
+  - [x] `clusterIP` (user-provided IP)
+  - [x] `tlsInsecure` (bool, persisted after probe)
+  - [x] Keep `username` and `token`
+  - [x] Derive at runtime (not persisted): `clusterEndpoint` (`https://<ip>:6443`), `registrationAddress` (`http://<ip>:30099`), `nodeAddress` (`<ip>`)
+- [x] Split validation by command context:
+  - [ ] `init` validation: IP format only (deferred to Phase 2)
+  - [x] `register` validation: cluster settings required (`ValidateForRegister`)
+  - [x] `server *` validation: cluster settings + username/token required (`ValidateForServer`)
+- [x] Drop legacy compatibility requirements (explicitly accepted — no users yet)
+- [x] Remove endpoint/IP/tls dependence from build-time constants:
+  - [x] Stop treating `ClusterEndpoint`, `NodeAddress`, `TLSInsecure` as runtime source of truth
+  - [x] Keep them as fallback defaults only
+- [x] Update/add config tests for:
+  - [x] load/save new schema
+  - [x] validation failures and messages per command context
+  - [x] derivation logic (IP → endpoint/address), including IPv6 safety
+- **Exit criteria:** config package tests pass with new schema ✅
 
 ### Phase 2: Add `kubecraft init` Command
 
@@ -318,21 +316,23 @@ Phase 8 (HTTPS Migration Prep) [decoupled]
 
 ```yaml
 clusterIP: "203.0.113.10"           # User-provided
-clusterEndpoint: "https://203.0.113.10:6443"  # Derived
-registrationAddress: "http://203.0.113.10:30099"  # Derived
-nodeAddress: "203.0.113.10"         # Derived
 tlsInsecure: true                   # Persisted after probe
 username: "alice"
 token: "eyJhbG..."
 ```
+
+Derived at runtime (not persisted):
+- `clusterEndpoint` = `https://<clusterIP>:6443`
+- `registrationAddress` = `http://<clusterIP>:30099`
+- `nodeAddress` = `<clusterIP>`
 
 ### Validation Requirements by Command
 
 | Command | Required Fields |
 |---------|----------------|
 | `init` | None (creates config) |
-| `register` | `clusterIP`, `registrationAddress`, `tlsInsecure` |
-| `server *` | `clusterIP`, `clusterEndpoint`, `nodeAddress`, `tlsInsecure`, `username`, `token` |
+| `register` | `clusterIP` |
+| `server *` | `clusterIP`, `username`, `token` |
 
 ---
 

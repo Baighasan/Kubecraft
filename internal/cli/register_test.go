@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -82,19 +83,22 @@ func TestRegisterUserAtURL_Unreachable(t *testing.T) {
 	}
 }
 
-func TestConfig_NoClusterEndpoint(t *testing.T) {
+func TestConfig_ValidateForServer_MissingClusterIP(t *testing.T) {
 	cfg := &config.Config{
 		Username: "testuser",
 		Token:    "testtoken",
 	}
 
-	err := cfg.Validate()
-	if err != nil {
-		t.Errorf("Validate() error = %v, want nil", err)
+	err := cfg.ValidateForServer()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, config.ErrClusterNotInitialized) {
+		t.Fatalf("expected ErrClusterNotInitialized, got %v", err)
 	}
 }
 
-func TestConfig_SaveAndLoad_NoClusterEndpoint(t *testing.T) {
+func TestConfig_SaveAndLoad_DoesNotAutoValidate(t *testing.T) {
 	cleanup := setTestHome(t)
 	defer cleanup()
 
@@ -119,13 +123,17 @@ func TestConfig_SaveAndLoad_NoClusterEndpoint(t *testing.T) {
 	if loaded.Token != "my-token" {
 		t.Errorf("Token = %q, want %q", loaded.Token, "my-token")
 	}
-}
 
-func TestClusterEndpoint_Default(t *testing.T) {
-	if config.ClusterEndpoint == "" {
-		t.Error("ClusterEndpoint should have a default value")
+	// LoadConfig should not auto-validate; explicit validation required
+	if err := loaded.ValidateForRegister(); !errors.Is(err, config.ErrClusterNotInitialized) {
+		t.Fatalf("ValidateForRegister expected ErrClusterNotInitialized, got %v", err)
+	}
+	if err := loaded.ValidateForServer(); !errors.Is(err, config.ErrClusterNotInitialized) {
+		t.Fatalf("ValidateForServer expected ErrClusterNotInitialized, got %v", err)
 	}
 }
+
+
 
 // Tests below use registerUserAtURL to test HTTP interaction logic
 // without being constrained by the const port in registerUser.

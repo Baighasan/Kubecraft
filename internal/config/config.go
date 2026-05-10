@@ -1,23 +1,30 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
 
+// ErrClusterNotInitialized indicates cluster ip is missing from config
+var ErrClusterNotInitialized = errors.New("cluster not initialized")
+
 // Config represents the user's saved configuration
 type Config struct {
-	Username string `yaml:"username"`
-	Token    string `yaml:"token"`
+	Username    string `yaml:"username"`
+	Token       string `yaml:"token"`
+	ClusterIP   string `yaml:"clusterIP"`
+	TLSInsecure bool   `yaml:"tlsInsecure"`
 }
 
 // GetConfigPath returns the path to ~/.kubecraft/config
 func GetConfigPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
-
 	if err != nil {
 		return "", fmt.Errorf("failed to get user directory: %w", err)
 	}
@@ -52,7 +59,7 @@ func SaveConfig(cfg *Config) error {
 		return fmt.Errorf("getting config path: %w", err)
 	}
 
-	err = os.MkdirAll(filepath.Dir(configPath), 0755)
+	err = os.MkdirAll(filepath.Dir(configPath), 0o755)
 	if err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
@@ -62,7 +69,7 @@ func SaveConfig(cfg *Config) error {
 		return fmt.Errorf("marshalling config to yaml: %w", err)
 	}
 
-	err = os.WriteFile(configPath, marshal, 0600)
+	err = os.WriteFile(configPath, marshal, 0o600)
 	if err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
@@ -96,23 +103,71 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("unmarshalling config: %w", err)
 	}
 
-	err = config.Validate()
-	if err != nil {
-		return nil, fmt.Errorf("validating config: %w", err)
-	}
-
 	return config, nil
 }
 
-// Validate checks that the config has all the required fields
-func (c *Config) Validate() error {
-	if len(c.Username) == 0 {
-		return fmt.Errorf("username is required")
-	}
-
-	if len(c.Token) == 0 {
-		return fmt.Errorf("token is missing")
+// ValidateForRegister checks that cluster ip exists before attempting to register
+func (c *Config) ValidateForRegister() error {
+	if err := c.validateClusterInitialized(); err != nil {
+		return fmt.Errorf("validating cluster initialization: %w", err)
 	}
 
 	return nil
+}
+
+// ValidateForServer checks that the config has all the required fields before running server commands
+func (c *Config) ValidateForServer() error {
+	if err := c.validateClusterInitialized(); err != nil {
+		return fmt.Errorf("validating cluster initialization: %w", err)
+	}
+
+	if err := c.validateAuth(); err != nil {
+		return fmt.Errorf("validating auth creds: %w", err)
+	}
+
+	return nil
+}
+
+// validateClusterInitialized checks that cluster ip exists in config
+func (c *Config) validateClusterInitialized() error {
+	if c.ClusterIP == "" {
+		return ErrClusterNotInitialized
+	}
+
+	return nil
+}
+
+// validateAuth checks that credentials for auth are present in config
+func (c *Config) validateAuth() error {
+	if c.Username == "" {
+		return fmt.Errorf("username is required")
+	}
+	if c.Token == "" {
+		return fmt.Errorf("token is missing")
+	}
+	return nil
+}
+
+// APIEndpoint constructs endpoint to hit cluster api
+func (c *Config) APIEndpoint() (string, error) {
+	if err := c.validateClusterInitialized(); err != nil {
+		return "", fmt.Errorf("failed to construct endpoint: %w", err)
+	}
+
+	hostPort := net.JoinHostPort(c.ClusterIP, strconv.Itoa(ClusterAPIPort))
+	apiURL := "https://" + hostPort
+
+	return apiURL, nil
+}
+
+// RegistrationEndpoint constructs endpoint to hit registration service
+func (c *Config) RegistrationEndpoint() (string, error) {
+	if err := c.validateClusterInitialized(); err != nil {
+		return "", fmt.Errorf("failed to construct endpoint: %w", err)
+	}
+
+	regHostPort := net.JoinHostPort(c.ClusterIP, strconv.Itoa(RegistrationServicePort))
+	regURL := "http://" + regHostPort
+
+	return regURL, nil
 }
