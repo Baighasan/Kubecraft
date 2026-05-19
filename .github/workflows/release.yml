@@ -80,6 +80,25 @@ jobs:
           sha256sum kubecraft-* > checksums.txt
           cd ..
 
+      - name: Verify binaries contain no embedded secrets
+        run: |
+          echo "Scanning built binaries for forbidden strings..."
+          forbidden=("PROD_ENDPOINT" "PROD_NODE_ADDRESS" "CHANGEME")
+          found=0
+          for file in dist/kubecraft-*; do
+            for token in "${forbidden[@]}"; do
+              if strings "$file" | grep -q "$token"; then
+                echo "FAIL: $file contains forbidden string: $token"
+                found=1
+              fi
+            done
+          done
+          if [ $found -eq 1 ]; then
+            echo "Verification failed. Remove embedded secrets before releasing."
+            exit 1
+          fi
+          echo "Verification passed. No forbidden strings found."
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

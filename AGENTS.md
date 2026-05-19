@@ -1,60 +1,27 @@
-# AGENTS.md
+# Kubecraft Agent Notes
 
-## Ownership Model
+## What this repo is
+- Single Go module CLI + in-cluster registration service; entrypoints are `cmd/kubecraft/main.go` and `cmd/registration-server/main.go`.
+- Static control-plane resources are Helm-managed in `charts/kubecraft-control-plane`; dynamic tenant/server resources are created by Go code in `internal/k8s` + `internal/registration`.
 
-- **Terraform** owns infrastructure lifecycle (OCI network, compute, K3s host).
-- **Helm** owns static control-plane Kubernetes resources (`charts/kubecraft-control-plane`).
-- **Go code** owns dynamic tenant and server runtime resources (registration handler + CLI).
+## Commands you should not guess
+- Build CLI with image ldflags: `make build` (injects `internal/config.ServerImage` with `SERVER_IMAGE_TAG`, default `dev`).
+- Unit test scope used by Makefile/CI: `make test` (targets `internal/config`, `internal/registration`, `internal/cli`, `internal/cli/server`).
+- Integration tests require a real cluster and run serially: `go test -v -race -p 1 -tags=integration ./internal/...`.
+- Helm chart checks used in CI: `helm lint ./charts/kubecraft-control-plane` and `helm template kubecraft-control-plane ./charts/kubecraft-control-plane | kubectl apply --dry-run=client -f -`.
+- End-to-end local validation script: `./scripts/test-all.sh` (Helm validate -> Helm install -> integration tests).
 
-No operational path should apply raw Kubernetes manifests for control-plane or dynamic resources.
+## Test and environment gotchas
+- Integration tests assume Kubernetes access via `KUBECONFIG` (or default kubeconfig) and expect control-plane RBAC/chart resources to exist.
+- Keep `-p 1` on integration runs; tests mutate shared cluster-scoped RBAC (`kc-users-capacity-check`) and can conflict in parallel.
+- `kubecraft init --ip` accepts only literal IPs (not DNS names), despite README wording.
 
-## Fast command map
+## Runtime/config facts that affect edits
+- User config is persisted to `~/.kubecraft/config` with fields `clusterIP`, `tlsInsecure`, `username`, `token`.
+- `init` probes Kubernetes API on `https://<clusterIP>:6443` and may persist `tlsInsecure: true` after TLS verification fallback.
+- Registration endpoint is `http://<clusterIP>:30099/register`; in-cluster registration service itself listens on `:8080`.
+- Server image override precedence in `server create`: `--server-image` flag, else `KUBECRAFT_SERVER_IMAGE`, else build-time default from `internal/config.ServerImage`.
 
-- Dev CLI build: `make build` (generic, no env-specific data baked in)
-- Unit tests (subset only, no cluster needed): `make test`
-- Integration tests (real cluster required): `go test -p 1 -tags=integration ./internal/...`
-- Single package: `go test ./internal/cli/server`
-- Single test: `go test ./internal/cli/server -run TestName`
-- Local k3d cluster:
-  1. `make cluster-up`
-  2. `make cluster-setup`
-  3. run tests / use CLI
-  4. `make cluster-down`
-- Helm control-plane validation: `helm lint ./charts/kubecraft-control-plane`
-- Unit tests (subset only, no cluster needed): `make test`
-- Integration tests (real cluster required): `go test -p 1 -tags=integration ./internal/...`
-- Full test suite: `./scripts/test-all.sh` (Helm lint + Go integration tests)
-
-## Project shape
-
-- Single Go module: `github.com/baighasan/kubecraft`
-- Two binaries:
-  - `cmd/kubecraft` — Cobra CLI
-  - `cmd/registration-server` — HTTP registration service
-- `internal/k8s` — all Kubernetes orchestration (namespace/RBAC/server CRUD/scale/capacity/token)
-- `internal/registration` — `/register` handler and username validation
-- `internal/cli/server` — user-facing server commands (`create/list/start/stop/delete`)
-- `charts/kubecraft-control-plane` — Helm chart for static control-plane resources (registration service + system RBAC)
-
-## Authentication model
-
-- No password. Registration returns a 5-year ServiceAccount token stored at `~/.kubecraft/config`.
-- CLI commands (except `register`) require this config and initialize a namespaced K8s client at startup.
-- Registration service runs in-cluster with a ClusterRole; users get namespace-scoped Roles only.
-
-## Key constraints
-
-- **Username/server name**: lowercase alnum only, length 3-16, must start with a letter.
-- **NodePort range**: Minecraft servers use `30000-30015`; registration service is `30099`.
-- **Capacity guard**: hard-coded for a single-node OCI model (14 Gi usable RAM). Creation is rejected if free RAM would drop below 4 Gi.
-- **Server resources**: request 2 Gi / limit 4 Gi; 10 Gi PVC via `local-path` StorageClass.
-- **Server image**: defaults to `ghcr.io/baighasan/kubecraft-minecraft`. Override with `--server-image` flag or `KUBECRAFT_SERVER_IMAGE` env var.
-- **Registration image**: defaults to `ghcr.io/baighasan/kubecraft-registration` via Helm values.
-- **Build-time ldflags**: Only `ServerImage` default tag is injected at build time (`Makefile`). Endpoint, node address, and TLS settings are configured at runtime via `kubecraft init`.
-
-## Gotchas
-
-- `make test` is **not** `go test ./...`. It intentionally runs only non-integration packages (`internal/config`, `internal/registration`, `internal/cli`, `internal/cli/server`). `internal/k8s` tests are integration-only and require the `integration` build tag.
-- Integration tests depend on `KUBECONFIG` (or `~/.kube/config`) and mutate cluster resources.
-- `make cluster-setup` installs the control-plane Helm chart (`charts/kubecraft-control-plane`).
-- Terraform variables are sensitive (OCID, SSH key, fingerprint) and excluded via `.gitignore` (`*.tfvars`, `.terraform/`).
+## CI/release conventions to preserve
+- PRs to `main` run unit/integration/manifests workflows based on path filters in `.github/workflows/`.
+- Release automation only runs when a PR is merged to `main` with `release` label; version bump is controlled by optional `semver:major` / `semver:minor` labels (otherwise patch).

@@ -6,7 +6,7 @@ SERVER_IMAGE_TAG ?= dev
 
 LDFLAGS = -X $(MODULE).ServerImage=ghcr.io/baighasan/kubecraft-minecraft:$(SERVER_IMAGE_TAG)
 
-.PHONY: build test clean cluster-up cluster-down cluster-setup-dev
+.PHONY: build test clean cluster-up cluster-down cluster-setup
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/kubecraft
@@ -20,7 +20,7 @@ clean:
 cluster-up:
 	k3d cluster create kubecraft-dev --api-port 0.0.0.0:6443 --port "30000-30099:30000-30099@server:0"
 
-cluster-setup-dev:
+cluster-setup:
 	helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane --set registration.image.tag=dev
 
 cluster-down:

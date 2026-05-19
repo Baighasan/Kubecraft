@@ -1,216 +1,225 @@
 # Kubecraft
 
-Kubecraft is a self-hosted Minecraft server platform built on Kubernetes. It lets a small group of friends each run their own isolated Minecraft server on shared infrastructure, managed entirely through a CLI tool — no web dashboard, no admin intervention after initial setup.
+Kubecraft is a self-hosted Minecraft server platform for Kubernetes.
+It gives each user an isolated server in their own namespace, managed entirely through a CLI tool - no web dashboard, no per-user admin work after setup.
 
-The platform runs on a single Oracle Cloud Ampere instance (ARM64) at $0/month using the Always Free Tier. Kubernetes handles multi-tenancy, resource isolation, and server lifecycle. Terraform provisions the infrastructure. Everything from user registration to server creation is automated.
+Kubecraft is cluster-agnostic. You can run it on any Kubernetes cluster that exposes:
+- Kubernetes API access for CLI clients
+- A registration endpoint on NodePort `30099`
+- Minecraft NodePort traffic on `30000-30015`
 
-**Stack:** Go · Kubernetes (K3s) · Terraform · Oracle Cloud · Docker
+**Stack:** Go - Kubernetes - Helm - Terraform (optional) - Docker
 
 ---
 
 ## Architecture
 
-**Ownership:** Terraform provisions infrastructure, Helm manages static control-plane resources, and Go code creates dynamic tenant/server resources at runtime.
+**Ownership model:**
+- **Terraform** owns infrastructure lifecycle (optional, provider-specific modules)
+- **Helm** owns static control-plane resources (`charts/kubecraft-control-plane`)
+- **Go runtime code** owns dynamic tenant and server resources
 
 ```
-  User's Machine                        Oracle Cloud (OCI)
-  ─────────────                         ──────────────────────────────────────────────
-                                        ┌─────────────────────────────────────────┐
-                                        │  VM.Standard.A1.Flex (ARM64)            │
-                                        │  3 OCPU · 16GB RAM · 100GB disk         │
-                                        │                                          │
-  ┌───────────┐  POST /register         │  ┌──────────────────────────────────┐   │
-  │           │ ──────────────────────► │  │ kubecraft-system namespace        │   │
-  │ kubecraft │   :30099                │  │  Registration Service (pod)       │   │
-  │   CLI     │ ◄────────────────────── │  │  - creates namespace + RBAC       │   │
-  │           │   {token}               │  │  - returns 5-year SA token        │   │
-  │           │                         │  └──────────────────────────────────┘   │
-  │           │  K8s API calls          │                                          │
-  │           │ ──────────────────────► │  ┌──────────────────────────────────┐   │
-  │  uses     │   :6443 (with token)    │  │ mc-{username} namespace           │   │
-  │  stored   │ ◄────────────────────── │  │  StatefulSet  ← server pod        │   │
-  │  token    │                         │  │  Service      ← NodePort :3000x   │   │
-  └───────────┘                         │  │  PVC          ← 10Gi world data   │   │
-                                        │  └──────────────────────────────────┘   │
-  Minecraft                             │                                          │
-  ┌───────────┐  TCP                    │  Each user gets their own namespace.     │
-  │  Client   │ ──────────────────────► │  RBAC prevents cross-namespace access.   │
-  └───────────┘   :3000x (NodePort)     │                                          │
-                                        └─────────────────────────────────────────┘
+                           Kubernetes Cluster
+  ---------------------------------------------------------------------------
+  |                                                                         |
+  |  kubecraft-system namespace                                             |
+  |  +-------------------------------+                                      |
+  |  | Registration Service          |  NodePort: 30099                    |
+  |  | - validates users             |                                      |
+  |  | - creates namespace + RBAC    |                                      |
+  |  | - issues SA token (5y)        |                                      |
+  |  +-------------------------------+                                      |
+  |                                                                         |
+  |  Tenant Namespaces (one per user)                                       |
+  |  +---------------------------+   +---------------------------+          |
+  |  | mc-alice                  |   | mc-bob                    |          |
+  |  | - StatefulSet (server)    |   | - StatefulSet (server)    |          |
+  |  | - Service (NodePort)      |   | - Service (NodePort)      |          |
+  |  | - PVC (10Gi world data)   |   | - PVC (10Gi world data)   |          |
+  |  | - Role/RoleBinding        |   | - Role/RoleBinding        |          |
+  |  +---------------------------+   +---------------------------+          |
+  |                                                                         |
+  |  Kubernetes API Server (:6443)                                          |
+  ---------------------------------------------------------------------------
+
+  External Clients
+  +---------------------------+      +----------------------------+
+  | kubecraft CLI             |----->| Register + K8s API access  |
+  | - init/register/server *  |      | (:30099, :6443)            |
+  +---------------------------+      +----------------------------+
+
+  +---------------------------+      +----------------------------+
+  | Minecraft Client          |----->| Server NodePort access     |
+  | - joins active server     |      | (:30000-30015)             |
+  +---------------------------+      +----------------------------+
 ```
 
 ---
 
-## How It's Built
+## Requirements
 
-### Infrastructure
+- Kubernetes cluster reachable by users running the CLI
+- Cluster API endpoint available to clients (default port `6443`)
+- NodePort range `30000-30015` open for Minecraft traffic
+- NodePort `30099` open for registration service
+- StorageClass available for PVC provisioning (`local-path` by default in K3s)
+- Helm available for control-plane installation
 
-Terraform provisions the full OCI stack: VCN, subnet, security list, and the Ampere compute instance. K3s is installed on first boot via cloud-init. Minecraft servers are exposed via **NodePort** services (ports 30000–30015) directly on the instance's public IP — no load balancer needed at this scale.
+## Quickstart
 
-### Multi-Tenancy
+Install static control-plane resources:
 
-Each user gets a dedicated Kubernetes namespace (`mc-{username}`) with:
-- A `Role` scoped to their namespace (create/manage StatefulSets, Services, PVCs)
-- A `ResourceQuota` capping them to one server and limiting CPU/memory
-- A shared `ClusterRole` for read-only capacity checks across the cluster
+```bash
+helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
+```
 
-The registration service is the only component with cluster-wide write permissions. Once a user is registered, their token only grants access to their own namespace.
+On each user's machine:
+
+```bash
+# 1) Configure endpoint and TLS behavior
+kubecraft init --ip <cluster-ip-or-dns>
+
+# 2) Register once
+kubecraft register --username <name>
+
+# 3) Create a server
+kubecraft server create <server-name>
+```
+
+## CLI Commands
+
+```bash
+kubecraft init --ip <cluster-ip-or-dns>
+kubecraft register --username <name>
+kubecraft server create <name>
+kubecraft server list
+kubecraft server start <name>
+kubecraft server stop <name>
+kubecraft server delete <name>
+```
 
 ### Registration Flow
 
-1. `kubecraft register --username <name>` sends a POST to the registration service
-2. Service validates the username, checks the 15-user cap, then creates the namespace, ServiceAccount, Role, RoleBinding, and ResourceQuota
-3. A 5-year ServiceAccount token is generated via the TokenRequest API and returned to the CLI
-4. Token is saved to `~/.kubecraft/config` — all future commands use it directly against the K8s API
+1. `kubecraft register --username <name>` posts to the registration service.
+2. Service validates username, checks user cap, and creates namespace + RBAC + quota resources.
+3. Service issues a 5-year ServiceAccount token via TokenRequest API.
+4. CLI stores token at `~/.kubecraft/config` and uses it for future Kubernetes API calls.
 
-### CLI
+### Multi-Tenancy Model
 
-Built with Go and Cobra. The cluster endpoint and node IP are embedded at build time via `ldflags` — the binary ships pre-configured.
+Each user gets namespace `mc-{username}` with:
+- Namespace-scoped `Role` and `RoleBinding` for server lifecycle actions
+- `ResourceQuota` limiting tenant resource usage
+- Access to shared read-only capacity checks
 
-```
-kubecraft register --username <name>   # one-time setup
-kubecraft server create <name>         # pre-flight check → allocate port → wait for ready
-kubecraft server list                  # name, status, NodePort, age
-kubecraft server start <name>          # scale StatefulSet 0→1
-kubecraft server stop <name>           # scale StatefulSet 1→0, PVC preserved
-kubecraft server delete <name>         # remove StatefulSet + Service + PVC
-```
+The registration service is the only component with cluster-wide write privileges.
 
-Before creating a server, the CLI sums memory requests across all running pods and rejects the request if headroom drops below 4GB — preventing OOM on the shared node.
+### Runtime Guards
 
-### Container Images
+- Username/server name must be lowercase alphanumeric, 3-16 chars, starting with a letter
+- Capacity guard is tuned for the current single-node profile (14 Gi usable RAM): reject creates if free memory would drop below 4 Gi
+- Default server resources: request 2 Gi, limit 4 Gi, PVC 10 Gi
 
-All images are published to GitHub Container Registry (GHCR):
+---
+
+## Images and Tagging
+
+Published on GHCR:
 
 | Image | Purpose |
 |-------|---------|
-| `ghcr.io/baighasan/kubecraft-minecraft` | Minecraft server runtime |
+| `ghcr.io/baighasan/kubecraft-minecraft` | Minecraft runtime |
 | `ghcr.io/baighasan/kubecraft-registration` | Registration service |
 
-Images are public — no `imagePullSecrets` required.
+Tag policy:
+- `dev` branch push -> mutable `:dev` tag
+- pull requests -> build only, no push
+- release tags (`v*`) -> immutable version tags
 
-#### Tagging Policy
+Use pinned release tags in production.
 
-| Event | Tag Produced | Example |
-|-------|-------------|---------|
-| Push to `dev` branch | `dev` | `ghcr.io/.../kubecraft-minecraft:dev` |
-| Pull Request | Build only (no push) | — |
-| Release (Git tag `v*`) | Exact version | `ghcr.io/.../kubecraft-minecraft:v0.1.0` |
+---
 
-- `:dev` is mutable and overwritten on every `dev` branch push. Use it only for local development.
-- Production deployments should always pin to a release tag (`vX.Y.Z`).
+## Development
 
-### Minecraft Servers
+### Build and test
 
-Each server is a StatefulSet backed by a 10Gi PVC for world persistence. The container image downloads the PaperMC jar at startup and is configured via environment variables (`VERSION`, `GAME_MODE`, `MAX_PLAYERS`, `JAVA_MEMORY`). Images are built for `linux/amd64`.
+```bash
+make build
+make test
+```
+
+### Integration tests (real cluster required)
+
+```bash
+go test -p 1 -tags=integration ./internal/...
+```
+
+### Local k3d flow
+
+```bash
+make cluster-up
+make cluster-setup
+go test -p 1 -tags=integration ./internal/...
+make cluster-down
+```
+
+### Dev image overrides
+
+```bash
+# Flag
+kubecraft server create myserver --server-image=ghcr.io/baighasan/kubecraft-minecraft:dev
+
+# Environment variable
+export KUBECRAFT_SERVER_IMAGE=ghcr.io/baighasan/kubecraft-minecraft:dev
+kubecraft server create myserver
+```
+
+---
+
+## Optional: OCI Reference Deployment
+
+The `terraform/` directory contains an Oracle Cloud reference deployment for teams that want a single-node K3s host provisioned automatically.
+
+```bash
+cd terraform
+terraform init
+terraform apply
+```
+
+This path is optional and not required for Kubecraft itself.
 
 ---
 
 ## Repository Layout
 
 ```
-cmd/                        # Binary entrypoints (CLI + registration server)
+cmd/                               # CLI and registration-server entrypoints
 internal/
-  k8s/                      # Kubernetes API wrapper (client-go)
-  registration/             # HTTP handler + username validation
-  config/                   # Constants, config file management
-  cli/                      # Cobra command implementations
-charts/kubecraft-control-plane/  # Helm chart for static control-plane resources
-docker/                          # Dockerfiles for Minecraft server + registration service
-terraform/                       # OCI infrastructure as code
-.github/workflows/               # CI: unit tests, integration tests, image builds
+  k8s/                             # Kubernetes orchestration layer
+  registration/                    # /register handler + validation
+  config/                          # CLI config file + constants
+  cli/                             # Cobra command implementations
+charts/kubecraft-control-plane/    # Helm chart for static control-plane resources
+docker/                            # Dockerfiles for Minecraft and registration images
+terraform/                         # Optional OCI reference infra module
+.github/workflows/                 # CI pipelines
 ```
 
----
+## Troubleshooting
 
-## Download CLI
-
-Pre-built binaries are available on [GitHub Releases](https://github.com/baighasan/kubecraft/releases).
-
-```bash
-# Download latest release (Linux AMD64 example)
-curl -LO https://github.com/baighasan/kubecraft/releases/latest/download/kubecraft-linux-amd64
-chmod +x kubecraft-linux-amd64
-mv kubecraft-linux-amd64 kubecraft
-```
-
-Each release includes binaries for `linux/darwin/windows` × `amd64/arm64` and a `checksums.txt` file.
-
-## Deployment
-
-```bash
-# Provision OCI infrastructure
-cd terraform && terraform init && terraform apply
-
-# Build CLI pointed at the new instance
-make build-prod
-
-# Install static control-plane resources (Helm-owned)
-helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane
-```
-
-### Pinning Image Tags in Production
-
-Pin to a specific release tag rather than using `latest`:
-
-```bash
-helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane \
-  --set registration.image.tag=v0.1.0
-```
-
-## Dev Flow
-
-### Option A: Local build + k3d import (fastest)
-
-```bash
-# Build locally
-docker build -t kubecraft-minecraft:dev -f docker/minecraft/Dockerfile .
-k3d image import kubecraft-minecraft:dev -c kubecraft-dev
-
-# Create server with local image
-kubecraft server create myserver --server-image=kubecraft-minecraft:dev
-```
-
-### Option B: Use the `:dev` tag from GHCR
-
-Push to `dev` branch and CI publishes `:dev` tags automatically:
-
-```bash
-# Build the dev CLI (already defaults to :dev)
-make build-dev
-
-# Install control-plane with :dev tag
-helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane \
-  --set registration.image.tag=dev
-
-# Create server — the dev binary already points to :dev
-kubecraft server create myserver
-```
-
-You can also override at runtime:
-
-```bash
-# Via flag
-kubecraft server create myserver --server-image=ghcr.io/baighasan/kubecraft-minecraft:dev
-
-# Via env
-export KUBECRAFT_SERVER_IMAGE=ghcr.io/baighasan/kubecraft-minecraft:dev
-kubecraft server create myserver
-```
-
-## Integration Tests
-
-Integration tests run against a local k3d cluster:
-
-```bash
-make cluster-up && make cluster-setup
-go test -p 1 -tags=integration ./internal/...
-```
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `Error: cannot reach Kubernetes API at https://<ip>:6443` | Firewall/network policy/security group blocks API access | Open inbound `6443` to the intended clients |
+| `Warning: registration endpoint unreachable on :30099` | Helm chart not installed or NodePort unavailable | Install/upgrade `kubecraft-control-plane` and verify NodePort exposure |
+| `Warning: TLS certificate verification failed. Falling back to insecure mode.` | Untrusted/self-signed API cert | Expected on many default K3s setups; re-run `kubecraft init` after trust changes |
+| `Error: cluster not initialized. Run kubecraft init --ip <public-ip> first.` | Missing `~/.kubecraft/config` | Run `kubecraft init --ip <cluster-ip-or-dns>` first |
 
 ---
 
 ## Status
 
-Core implementation is complete. Static control-plane resources (namespace, RBAC, registration service) are managed by the Helm chart at `charts/kubecraft-control-plane/`. Dynamic tenant and server resources (namespaces, StatefulSets, Services, PVCs) are created exclusively by the Go runtime code. Legacy manifest templates have been removed.
-
-Waiting on Oracle Cloud capacity to provision the Ampere instance — running a polling script to claim one as it becomes available.
+Static control-plane resources are Helm-managed.
+Dynamic tenant and server resources are created by Go runtime code.
+No operational path should apply raw Kubernetes manifests for these resources.
