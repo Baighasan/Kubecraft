@@ -2,7 +2,7 @@ BINARY = kubecraft
 MODULE = github.com/baighasan/kubecraft/internal/config
 
 # Image tag override
-SERVER_IMAGE_TAG ?= latest
+SERVER_IMAGE_TAG ?= dev
 
 LDFLAGS = -X $(MODULE).ServerImage=ghcr.io/baighasan/kubecraft-minecraft:$(SERVER_IMAGE_TAG)
 
@@ -18,7 +18,7 @@ clean:
 	rm -f $(BINARY)
 
 cluster-up:
-	k3d cluster create kubecraft-dev --api-port 0.0.0.0:43835 --port "30000-30099:30000-30099@server:0"
+	k3d cluster create kubecraft-dev --api-port 0.0.0.0:6443 --port "30000-30099:30000-30099@server:0"
 
 cluster-setup-dev:
 	helm upgrade --install kubecraft-control-plane ./charts/kubecraft-control-plane --set registration.image.tag=dev

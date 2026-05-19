@@ -65,7 +65,7 @@ var ReservedUserNames = []string{
 
 // Env variables injected at build time via ldflags
 var (
-	ServerImage = "ghcr.io/baighasan/kubecraft-minecraft:latest"
+	ServerImage = "ghcr.io/baighasan/kubecraft-minecraft:dev"
 )
 
 // Token Configuration
