@@ -37,7 +37,12 @@ rules:
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["clusterrolebindings"]
   verbs: ["get", "update", "patch"]
-  resourceNames: ["{{ .Values.rbac.capacityChecker.bindingName }}"]
+  resourceNames: ["{{ .Values.rbac.capacityChecker.bindingName }}", "{{ .Values.rbac.registrationAdmin.bindingName }}"]
+# Read required ClusterRoles for startup validation
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles"]
+  verbs: ["get"]
+  resourceNames: ["{{ .Values.rbac.capacityChecker.clusterRoleName }}", "{{ .Values.rbac.registrationAdmin.clusterRoleName }}"]
 # Create resource quotas
 - apiGroups: [""]
   resources: ["resourcequotas"]

@@ -11,6 +11,7 @@ const (
 
 // Network Configuration
 const (
+	ClusterAPIPort          = 6443  // Cluster API port
 	RegistrationPort        = 8080  // Internal container port
 	RegistrationServicePort = 30099 // External NodePort for registration
 	McNodePortRangeMin      = 30000 // Start of Minecraft server NodePort range
@@ -64,9 +65,7 @@ var ReservedUserNames = []string{
 
 // Env variables injected at build time via ldflags
 var (
-	ClusterEndpoint = "localhost" // K8s API server address (host:port)
-	NodeAddress     = "localhost" // Public IP/hostname for Minecraft connections
-	TLSInsecure     = "false"
+	ServerImage = "ghcr.io/baighasan/kubecraft-minecraft:dev"
 )
 
 // Token Configuration
@@ -79,12 +78,12 @@ const (
 const (
 	MinServerNameLength = 3
 	MaxServerNameLength = 16
-	ServerImage         = "hasanbaig786/kubecraft"
-	MinecraftPort       = 25565
-	ServerStorageSize   = "10Gi"
-	ServerStorageClass  = "local-path"
-	CapacityThreshold   = 4096  // 4GB in MiB — minimum free RAM to allow creation (matches server limit)
-	TotalAvailableRAM   = 14336 // 14GB in MiB — total RAM for workloads (16GB - 2GB system overhead)
+
+	MinecraftPort      = 25565
+	ServerStorageSize  = "10Gi"
+	ServerStorageClass = "local-path"
+	CapacityThreshold  = 4096  // 4GB in MiB — minimum free RAM to allow creation (matches server limit)
+	TotalAvailableRAM  = 14336 // 14GB in MiB — total RAM for workloads (16GB - 2GB system overhead)
 )
 
 // Readiness Check

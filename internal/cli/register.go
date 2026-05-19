@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 
@@ -25,6 +24,12 @@ type RegisterResponse struct {
 	Message  string `json:"message,omitempty"`  // only in error
 }
 
+// RegistrationCredentials holds the credentials within the response from registration server
+type RegistrationCredentials struct {
+	Username string
+	Token    string
+}
+
 var username string
 
 var registerCmd = &cobra.Command{
@@ -37,59 +42,73 @@ var registerCmd = &cobra.Command{
 }
 
 func registerUser(username string) error {
-	host, _, err := net.SplitHostPort(config.ClusterEndpoint)
-	if err != nil {
-		// No port in endpoint, use as-is
-		host = config.ClusterEndpoint
-	}
-	url := fmt.Sprintf("http://%s:%d/register", host, config.RegistrationServicePort)
-	return registerUserAtURL(username, url)
-}
-
-func registerUserAtURL(username string, url string) error {
 	configExists, err := config.CheckConfigExists()
 	if err != nil {
 		return fmt.Errorf("failed to check existing config: %v", err)
-	}
-	if configExists {
-		return fmt.Errorf("you are already registered. Delete ~/.kubecraft/config first if you want to re-register")
+	} else if !configExists {
+		return fmt.Errorf("config does not exist. run kubecraft init --ip <clusterIP> first")
 	}
 
-	reqPayload := &RegisterRequest{Username: username}
-
-	jsonData, err := json.Marshal(reqPayload)
+	cfg, err := config.LoadConfig()
 	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %v", err)
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if cfg.CheckRegistered() {
+		return fmt.Errorf("you are already registered. delete user and token fields in ~/.kubecraft/config to register again")
+	}
+
+	registrationURL, err := cfg.RegistrationEndpoint()
 	if err != nil {
-		return fmt.Errorf("could not reach registration server at %s:%d: %v", config.ClusterEndpoint, config.RegistrationServicePort, err)
-	}
-	defer resp.Body.Close()
-
-	var regResponse RegisterResponse
-	if err := json.NewDecoder(resp.Body).Decode(&regResponse); err != nil {
-		return fmt.Errorf("registration server returned status %d and response could not be parsed", resp.StatusCode)
+		return fmt.Errorf("failed to build registration url: %w", err)
 	}
 
-	if resp.StatusCode >= 300 || regResponse.Status != "success" {
-		return fmt.Errorf("failed to register user: %s", regResponse.Message)
+	registrationCreds, err := registerUserAtURL(username, registrationURL)
+	if err != nil {
+		return fmt.Errorf("failed to register user: %w", err)
 	}
 
-	cfg := &config.Config{
-		Username: regResponse.Username,
-		Token:    regResponse.Token,
-	}
+	cfg.Username = registrationCreds.Username
+	cfg.Token = registrationCreds.Token
 
 	err = config.SaveConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to save config: %v", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Successfully registered user: %v. Configuration saved to ~/.kubecraft/config\n", regResponse.Username)
+	fmt.Fprintf(os.Stderr, "Successfully registered user: %v. Configuration saved to ~/.kubecraft/config\n", username)
 
 	return nil
+}
+
+func registerUserAtURL(username string, registrationURL string) (*RegistrationCredentials, error) {
+	registrationCreds := &RegistrationCredentials{}
+	reqPayload := &RegisterRequest{Username: username}
+
+	jsonData, err := json.Marshal(reqPayload)
+	if err != nil {
+		return registrationCreds, fmt.Errorf("failed to marshal payload: %v", err)
+	}
+
+	resp, err := http.Post(registrationURL+"/register", "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return registrationCreds, fmt.Errorf("could not reach registration server at %s: %w", registrationURL, err)
+	}
+	defer resp.Body.Close()
+
+	var regResponse RegisterResponse
+	if err := json.NewDecoder(resp.Body).Decode(&regResponse); err != nil {
+		return registrationCreds, fmt.Errorf("registration server returned status %d and response could not be parsed: %w", resp.StatusCode, err)
+	}
+
+	if resp.StatusCode >= 300 || regResponse.Status != "success" {
+		return registrationCreds, fmt.Errorf("failed to register user: %s", regResponse.Message)
+	}
+
+	registrationCreds.Username = regResponse.Username
+	registrationCreds.Token = regResponse.Token
+
+	return registrationCreds, nil
 }
 
 func init() {

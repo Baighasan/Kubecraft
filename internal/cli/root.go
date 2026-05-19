@@ -27,7 +27,7 @@ func init() {
 
 	// Check config exists, load it, and create client (register command doesn't need config)
 	RootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		if cmd.Name() == "register" {
+		if cmd.Name() == "init" || cmd.Name() == "register" {
 			return nil
 		}
 
@@ -36,7 +36,7 @@ func init() {
 			return fmt.Errorf("error while checking config exists: %v", err)
 		}
 		if !configExists {
-			return fmt.Errorf("please register first by running kubecraft register")
+			return fmt.Errorf("please register first by running kubecraft init then kubecraft register")
 		}
 
 		AppConfig, err = config.LoadConfig()
@@ -44,7 +44,12 @@ func init() {
 			return fmt.Errorf("error while loading config: %v", err)
 		}
 
-		K8sClient, err = k8s.NewClientFromToken(AppConfig.Token, config.ClusterEndpoint, AppConfig.Username)
+		clusterAPIEndpoint, err := AppConfig.APIEndpoint()
+		if err != nil {
+			return fmt.Errorf("failed to build cluster api endpoint: %w", err)
+		}
+
+		K8sClient, err = k8s.NewClientFromToken(AppConfig.Token, clusterAPIEndpoint, AppConfig.TLSInsecure, AppConfig.Username)
 		if err != nil {
 			return fmt.Errorf("error while creating k8s client: %v", err)
 		}

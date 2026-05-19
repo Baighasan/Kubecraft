@@ -2,10 +2,12 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/baighasan/kubecraft/internal/config"
@@ -25,7 +27,7 @@ func setTestHome(t *testing.T) func() {
 	}
 }
 
-// createFakeConfig creates a config file in the test HOME directory
+// createFakeConfig creates a config file in the test HOME directory with full credentials
 func createFakeConfig(t *testing.T) {
 	t.Helper()
 
@@ -45,7 +47,43 @@ func createFakeConfig(t *testing.T) {
 	}
 }
 
-func TestRegisterUser_AlreadyRegistered(t *testing.T) {
+// createInitOnlyConfig creates a config file with only cluster IP set (no credentials)
+func createInitOnlyConfig(t *testing.T, clusterIP string) {
+	t.Helper()
+
+	configPath, err := config.GetConfigPath()
+	if err != nil {
+		t.Fatalf("Failed to get config path: %v", err)
+	}
+
+	err = os.MkdirAll(filepath.Dir(configPath), 0755)
+	if err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	content := "clusterIP: " + clusterIP + "\n"
+	err = os.WriteFile(configPath, []byte(content), 0600)
+	if err != nil {
+		t.Fatalf("Failed to write init config: %v", err)
+	}
+}
+
+func TestRegisterUser_ConfigMissing_ReturnsInitHint(t *testing.T) {
+	cleanup := setTestHome(t)
+	defer cleanup()
+
+	err := registerUser("alice")
+	if err == nil {
+		t.Fatal("expected error when config missing, got nil")
+	}
+
+	expected := "config does not exist. run kubecraft init --ip <clusterIP> first"
+	if err.Error() != expected {
+		t.Errorf("error = %q, want %q", err.Error(), expected)
+	}
+}
+
+func TestRegisterUser_BlocksWhenAlreadyRegistered(t *testing.T) {
 	cleanup := setTestHome(t)
 	defer cleanup()
 
@@ -56,45 +94,28 @@ func TestRegisterUser_AlreadyRegistered(t *testing.T) {
 		t.Fatal("expected error when already registered, got nil")
 	}
 
-	expected := "you are already registered. Delete ~/.kubecraft/config first if you want to re-register"
+	expected := "you are already registered. delete user and token fields in ~/.kubecraft/config to register again"
 	if err.Error() != expected {
 		t.Errorf("error = %q, want %q", err.Error(), expected)
 	}
 }
 
-func TestRegisterUserAtURL_Unreachable(t *testing.T) {
-	cleanup := setTestHome(t)
-	defer cleanup()
-
-	// Start and immediately close a server to get a port that refuses connections
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	url := server.URL + "/register"
-	server.Close()
-
-	err := registerUserAtURL("alice", url)
-	if err == nil {
-		t.Fatal("expected error when server unreachable, got nil")
-	}
-
-	expected := "could not reach registration server at"
-	if len(err.Error()) < len(expected) || err.Error()[:len(expected)] != expected {
-		t.Errorf("error = %q, want prefix %q", err.Error(), expected)
-	}
-}
-
-func TestConfig_NoClusterEndpoint(t *testing.T) {
+func TestConfig_ValidateForServer_MissingClusterIP(t *testing.T) {
 	cfg := &config.Config{
 		Username: "testuser",
 		Token:    "testtoken",
 	}
 
-	err := cfg.Validate()
-	if err != nil {
-		t.Errorf("Validate() error = %v, want nil", err)
+	err := cfg.ValidateForServer()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, config.ErrClusterNotInitialized) {
+		t.Fatalf("expected ErrClusterNotInitialized, got %v", err)
 	}
 }
 
-func TestConfig_SaveAndLoad_NoClusterEndpoint(t *testing.T) {
+func TestConfig_SaveAndLoad_DoesNotAutoValidate(t *testing.T) {
 	cleanup := setTestHome(t)
 	defer cleanup()
 
@@ -119,18 +140,20 @@ func TestConfig_SaveAndLoad_NoClusterEndpoint(t *testing.T) {
 	if loaded.Token != "my-token" {
 		t.Errorf("Token = %q, want %q", loaded.Token, "my-token")
 	}
-}
 
-func TestClusterEndpoint_Default(t *testing.T) {
-	if config.ClusterEndpoint == "" {
-		t.Error("ClusterEndpoint should have a default value")
+	// LoadConfig should not auto-validate; explicit validation required
+	if err := loaded.ValidateForRegister(); !errors.Is(err, config.ErrClusterNotInitialized) {
+		t.Fatalf("ValidateForRegister expected ErrClusterNotInitialized, got %v", err)
+	}
+	if err := loaded.ValidateForServer(); !errors.Is(err, config.ErrClusterNotInitialized) {
+		t.Fatalf("ValidateForServer expected ErrClusterNotInitialized, got %v", err)
 	}
 }
 
 // Tests below use registerUserAtURL to test HTTP interaction logic
 // without being constrained by the const port in registerUser.
 
-func TestRegisterUserAtURL_Success(t *testing.T) {
+func TestRegisterUserAtURL_Success_ReturnsCredentials(t *testing.T) {
 	cleanup := setTestHome(t)
 	defer cleanup()
 
@@ -159,21 +182,19 @@ func TestRegisterUserAtURL_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	err := registerUserAtURL("alice", server.URL+"/register")
+	creds, err := registerUserAtURL("alice", server.URL)
 	if err != nil {
 		t.Fatalf("registerUserAtURL() error = %v", err)
 	}
 
-	// Verify config was saved
-	loaded, err := config.LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
+	if creds == nil {
+		t.Fatal("expected non-nil credentials, got nil")
 	}
-	if loaded.Username != "alice" {
-		t.Errorf("saved Username = %q, want %q", loaded.Username, "alice")
+	if creds.Username != "alice" {
+		t.Errorf("Username = %q, want %q", creds.Username, "alice")
 	}
-	if loaded.Token != "test-token-abc123" {
-		t.Errorf("saved Token = %q, want %q", loaded.Token, "test-token-abc123")
+	if creds.Token != "test-token-abc123" {
+		t.Errorf("Token = %q, want %q", creds.Token, "test-token-abc123")
 	}
 }
 
@@ -191,7 +212,7 @@ func TestRegisterUserAtURL_ServerReturnsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	err := registerUserAtURL("alice", server.URL+"/register")
+	_, err := registerUserAtURL("alice", server.URL)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -212,30 +233,33 @@ func TestRegisterUserAtURL_UnparseableResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	err := registerUserAtURL("alice", server.URL+"/register")
+	_, err := registerUserAtURL("alice", server.URL)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 
 	expected := "registration server returned status 502 and response could not be parsed"
-	if err.Error() != expected {
-		t.Errorf("error = %q, want %q", err.Error(), expected)
+	if !strings.HasPrefix(err.Error(), expected) {
+		t.Errorf("error = %q, want prefix %q", err.Error(), expected)
 	}
 }
 
-func TestRegisterUserAtURL_AlreadyRegistered(t *testing.T) {
+func TestRegisterUserAtURL_Unreachable(t *testing.T) {
 	cleanup := setTestHome(t)
 	defer cleanup()
 
-	createFakeConfig(t)
+	// Start and immediately close a server to get a port that refuses connections
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	url := server.URL
+	server.Close()
 
-	err := registerUserAtURL("newuser", "http://localhost/register")
+	_, err := registerUserAtURL("alice", url)
 	if err == nil {
-		t.Fatal("expected error when already registered, got nil")
+		t.Fatal("expected error when server unreachable, got nil")
 	}
 
-	expected := "you are already registered. Delete ~/.kubecraft/config first if you want to re-register"
-	if err.Error() != expected {
-		t.Errorf("error = %q, want %q", err.Error(), expected)
+	expected := "could not reach registration server at"
+	if len(err.Error()) < len(expected) || err.Error()[:len(expected)] != expected {
+		t.Errorf("error = %q, want prefix %q", err.Error(), expected)
 	}
 }

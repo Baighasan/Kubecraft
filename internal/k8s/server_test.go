@@ -40,7 +40,7 @@ func TestServerExists_ReturnsTrue(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port)
+	err = client.CreateServer("testserver", username, port, "")
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -81,7 +81,7 @@ func TestAllocateNodePort_SkipsOccupiedPorts(t *testing.T) {
 		t.Fatalf("AllocateNodePort() first call error = %v", err)
 	}
 
-	err = client.CreateServer("server1", username, port1)
+	err = client.CreateServer("server1", username, port1, "")
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -110,7 +110,7 @@ func TestCreateServer_Success(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port)
+	err = client.CreateServer("testserver", username, port, "")
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -151,7 +151,7 @@ func TestCreateServer_DuplicateNameFails(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port)
+	err = client.CreateServer("testserver", username, port, "")
 	if err != nil {
 		t.Fatalf("First CreateServer() error = %v", err)
 	}
@@ -161,7 +161,7 @@ func TestCreateServer_DuplicateNameFails(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port2)
+	err = client.CreateServer("testserver", username, port2, "")
 	if err == nil {
 		t.Error("Second CreateServer() expected error for duplicate name, got nil")
 	}
@@ -180,7 +180,7 @@ func TestDeleteServer_Success(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port)
+	err = client.CreateServer("testserver", username, port, "")
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -244,7 +244,7 @@ func TestListServers_ReturnsCreatedServer(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port)
+	err = client.CreateServer("testserver", username, port, "")
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -281,7 +281,7 @@ func TestScaleServer_StopAndStart(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port)
+	err = client.CreateServer("testserver", username, port, "")
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -375,7 +375,7 @@ func TestListServers_ShowsStoppedServer(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port)
+	err = client.CreateServer("testserver", username, port, "")
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
