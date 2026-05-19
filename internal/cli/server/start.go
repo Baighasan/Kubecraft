@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/baighasan/kubecraft/internal/cli"
-	"github.com/baighasan/kubecraft/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -50,7 +49,7 @@ func executeStart(serverName string) error {
 		return fmt.Errorf("couldn't get node port: %v", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Server %s is ready at %s:%d\n", serverName, config.NodeAddress, serverPort)
+	fmt.Fprintf(os.Stderr, "Server %s is ready at %s:%d\n", serverName, cli.AppConfig.ClusterIP, serverPort)
 
 	return nil
 }

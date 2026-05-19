@@ -92,6 +92,43 @@ func TestConfigValidateForServer(t *testing.T) {
 	})
 }
 
+func TestConfigCheckRegistered(t *testing.T) {
+	t.Run("both_set_returns_true", func(t *testing.T) {
+		cfg := &Config{
+			Username: "alice",
+			Token:    "my-token",
+		}
+		if !cfg.CheckRegistered() {
+			t.Fatal("expected CheckRegistered() = true, got false")
+		}
+	})
+
+	t.Run("missing_username_returns_false", func(t *testing.T) {
+		cfg := &Config{
+			Token: "my-token",
+		}
+		if cfg.CheckRegistered() {
+			t.Fatal("expected CheckRegistered() = false, got true")
+		}
+	})
+
+	t.Run("missing_token_returns_false", func(t *testing.T) {
+		cfg := &Config{
+			Username: "alice",
+		}
+		if cfg.CheckRegistered() {
+			t.Fatal("expected CheckRegistered() = false, got true")
+		}
+	})
+
+	t.Run("both_missing_returns_false", func(t *testing.T) {
+		cfg := &Config{}
+		if cfg.CheckRegistered() {
+			t.Fatal("expected CheckRegistered() = false, got true")
+		}
+	})
+}
+
 func TestConfigEndpointDerivations(t *testing.T) {
 	t.Run("ipv4_derivation", func(t *testing.T) {
 		cfg := &Config{

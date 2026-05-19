@@ -65,10 +65,7 @@ var ReservedUserNames = []string{
 
 // Env variables injected at build time via ldflags
 var (
-	ClusterEndpoint = "localhost" // K8s API server address (host:port)
-	NodeAddress     = "localhost" // Public IP/hostname for Minecraft connections
-	TLSInsecure     = "false"
-	ServerImage     = "ghcr.io/baighasan/kubecraft-minecraft:latest"
+	ServerImage = "ghcr.io/baighasan/kubecraft-minecraft:latest"
 )
 
 // Token Configuration

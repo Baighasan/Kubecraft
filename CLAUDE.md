@@ -21,7 +21,7 @@ Self-service Minecraft server hosting platform. Users create, manage, and connec
 - **ARM64** — all Docker images must be multi-arch (AMD64 + ARM64)
 
 **Core components:**
-1. **CLI Tool** — Go/Cobra, direct K8s API access, embedded cluster endpoint
+1. **CLI Tool** — Go/Cobra, direct K8s API access, runtime-configured cluster endpoint
 2. **Registration Service** — Go HTTP server in `kubecraft-system` namespace (NodePort 30099)
 3. **User Namespaces** — `mc-{username}`, one per user, RBAC-isolated
 4. **Minecraft Pods** — StatefulSets with 10Gi PVCs, up to 1 per user
@@ -113,24 +113,24 @@ terraform/
 ## Build & Test
 
 ```bash
-# CLI builds
-make build-dev    # localhost endpoint, TLS insecure (for k3d)
-make build-prod   # OCI instance endpoint, TLS strict
+# CLI build
+make build          # Generic binary (no env-specific data baked in)
 
 # Tests
 make test                                   # Unit tests only
 go test -p 1 -tags=integration ./internal/...   # Integration tests (requires cluster)
 
 # Local cluster
-make cluster-up     # k3d with NodePort mapping 30000-30099
-make cluster-setup  # Install control-plane Helm chart
-make cluster-down   # Tear down k3d cluster
+make cluster-up          # k3d with NodePort mapping 30000-30099
+make cluster-setup-dev   # Install control-plane Helm chart
+make cluster-down        # Tear down k3d cluster
 ```
 
 **Build-time variables (injected via ldflags):**
-- `ClusterEndpoint` — K8s API server address embedded in CLI binary
-- `NodeAddress` — public IP returned to users after server creation
-- `TLSInsecure` — `true` for dev (k3d), `false` for prod
+- `ServerImage` — default Minecraft server image tag
+
+**Runtime configuration:**
+- `kubecraft init --ip <public-ip>` — configures cluster endpoint, TLS mode, and node address
 
 ---
 

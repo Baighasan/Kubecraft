@@ -10,9 +10,7 @@ No operational path should apply raw Kubernetes manifests for control-plane or d
 
 ## Fast command map
 
-- Dev CLI build (k3d defaults): `make build-dev`
-- Prod CLI build (must override placeholders):
-  `make build-prod PROD_ENDPOINT=<host:6443> PROD_NODE_ADDRESS=<public-ip>`
+- Dev CLI build: `make build` (generic, no env-specific data baked in)
 - Unit tests (subset only, no cluster needed): `make test`
 - Integration tests (real cluster required): `go test -p 1 -tags=integration ./internal/...`
 - Single package: `go test ./internal/cli/server`
@@ -52,7 +50,7 @@ No operational path should apply raw Kubernetes manifests for control-plane or d
 - **Server resources**: request 2 Gi / limit 4 Gi; 10 Gi PVC via `local-path` StorageClass.
 - **Server image**: defaults to `ghcr.io/baighasan/kubecraft-minecraft`. Override with `--server-image` flag or `KUBECRAFT_SERVER_IMAGE` env var.
 - **Registration image**: defaults to `ghcr.io/baighasan/kubecraft-registration` via Helm values.
-- **Build-time ldflags**: `ClusterEndpoint`, `NodeAddress`, `TLSInsecure`, `ServerImage` are injected at build time (`Makefile`). Do not rely on runtime env vars for these.
+- **Build-time ldflags**: Only `ServerImage` default tag is injected at build time (`Makefile`). Endpoint, node address, and TLS settings are configured at runtime via `kubecraft init`.
 
 ## Gotchas
 

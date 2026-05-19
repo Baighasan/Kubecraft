@@ -64,15 +64,10 @@ jobs:
           git push origin "${{ steps.version.outputs.new_tag }}"
 
       - name: Build CLI binaries
-        env:
-          PROD_ENDPOINT: ${{ vars.PROD_ENDPOINT }}
-          PROD_NODE_ADDRESS: ${{ vars.PROD_NODE_ADDRESS }}
         run: |
           MODULE=github.com/baighasan/kubecraft/internal/config
-          ENDPOINT="${PROD_ENDPOINT:-CHANGEME:6443}"
-          NODE="${PROD_NODE_ADDRESS:-CHANGEME}"
           TAG="${{ steps.version.outputs.new_tag }}"
-          LDFLAGS="-X ${MODULE}.ClusterEndpoint=${ENDPOINT} -X ${MODULE}.NodeAddress=${NODE} -X ${MODULE}.TLSInsecure=false -X ${MODULE}.ServerImage=ghcr.io/baighasan/kubecraft-minecraft:${TAG}"
+          LDFLAGS="-X ${MODULE}.ServerImage=ghcr.io/baighasan/kubecraft-minecraft:${TAG}"
 
           mkdir -p dist
           GOOS=linux   GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/kubecraft-linux-amd64     ./cmd/kubecraft

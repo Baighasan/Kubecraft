@@ -32,12 +32,12 @@ func NewInClusterClient() (*Client, error) {
 	}, nil
 }
 
-func NewClientFromToken(token string, endpoint string, username string) (*Client, error) {
+func NewClientFromToken(token string, endpoint string, tlsInsecure bool, username string) (*Client, error) {
 	cfg := &rest.Config{
-		Host:        "https://" + endpoint,
+		Host:        endpoint,
 		BearerToken: token,
 		TLSClientConfig: rest.TLSClientConfig{
-			Insecure: config.TLSInsecure == "true",
+			Insecure: tlsInsecure,
 		},
 	}
 

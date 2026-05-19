@@ -148,6 +148,14 @@ func (c *Config) validateAuth() error {
 	return nil
 }
 
+// CheckRegistered checks if user has already registered
+func (c *Config) CheckRegistered() bool {
+	if c.Username == "" || c.Token == "" {
+		return false
+	}
+	return true
+}
+
 // APIEndpoint constructs endpoint to hit cluster api
 func (c *Config) APIEndpoint() (string, error) {
 	if err := c.validateClusterInitialized(); err != nil {

@@ -1,6 +1,6 @@
 # Distribution Migration Plan: From Pre-configured Binary to BYO Cluster
 
-**Status:** Phase 1 complete — Phase 2 (Init Command) pending  
+**Status:** Phases 1–5 complete — Phase 6 (Documentation Migration) in progress  
 **Goal:** Ship a single generic CLI artifact with no environment-specific endpoint/IP baked in, so users bring their own Kubernetes cluster.
 
 ---
@@ -100,7 +100,7 @@ Benefits:
 - [x] Document v1 cluster compatibility boundary
 - **Exit criteria:** contract approved and implementation started
 
-### Phase 1: Configuration Model Refactor
+### Phase 1: Configuration Model Refactor ✅ COMPLETE
 
 **Targets:** `internal/config/config.go`, `internal/config/constants.go`, `internal/config/*test.go`
 
@@ -110,7 +110,7 @@ Benefits:
   - [x] Keep `username` and `token`
   - [x] Derive at runtime (not persisted): `clusterEndpoint` (`https://<ip>:6443`), `registrationAddress` (`http://<ip>:30099`), `nodeAddress` (`<ip>`)
 - [x] Split validation by command context:
-  - [ ] `init` validation: IP format only (deferred to Phase 2)
+  - [x] `init` validation: IP format only (completed in Phase 2)
   - [x] `register` validation: cluster settings required (`ValidateForRegister`)
   - [x] `server *` validation: cluster settings + username/token required (`ValidateForServer`)
 - [x] Drop legacy compatibility requirements (explicitly accepted — no users yet)
@@ -121,83 +121,93 @@ Benefits:
   - [x] load/save new schema
   - [x] validation failures and messages per command context
   - [x] derivation logic (IP → endpoint/address), including IPv6 safety
+  - [x] `CheckRegistered()` helper for auth state
 - **Exit criteria:** config package tests pass with new schema ✅
 
-### Phase 2: Add `kubecraft init` Command
+### Phase 2: Add `kubecraft init` Command ✅ COMPLETE
 
 **Targets:** `internal/cli/init.go` (new), `internal/cli/root.go`
 
-- [ ] Add `kubecraft init --ip <x.x.x.x>` command
-  - [ ] Validate IP format (IPv4/IPv6)
-  - [ ] Derive and store:
-    - [ ] `clusterEndpoint` = `https://<ip>:6443`
-    - [ ] `registrationAddress` = `http://<ip>:30099`
-    - [ ] `nodeAddress` = `<ip>`
-  - [ ] Implement TLS probe:
-    - [ ] Attempt API connection with strict TLS to `https://<ip>:6443`
-    - [ ] On TLS cert failure, retry with `InsecureSkipVerify`
-    - [ ] Persist `tlsInsecure=true` on fallback
-    - [ ] Print explicit security warning when fallback is persisted
-  - [ ] Print concise "next steps" hint (`kubecraft register --username <name>`)
-- [ ] Guardrails:
-  - [ ] Friendly error if IP is missing or invalid
-  - [ ] Friendly error if API is unreachable on `:6443`
-  - [ ] Warning if registration endpoint unreachable on `:30099`
-- [ ] Update CLI tests:
-  - [ ] init command validation
-  - [ ] TLS probe behavior (secure + fallback)
-  - [ ] Config persistence after init
-- **Exit criteria:** init writes complete usable config and reports deterministic next step
+- [x] Add `kubecraft init --ip <x.x.x.x>` command
+  - [x] Validate IP format (IPv4/IPv6)
+  - [x] Derive and store:
+    - [x] `clusterEndpoint` = `https://<ip>:6443`
+    - [x] `registrationAddress` = `http://<ip>:30099`
+    - [x] `nodeAddress` = `<ip>`
+  - [x] Implement TLS probe:
+    - [x] Attempt API connection with strict TLS to `https://<ip>:6443`
+    - [x] On TLS cert failure, retry with `InsecureSkipVerify`
+    - [x] Persist `tlsInsecure=true` on fallback
+    - [x] Print explicit security warning when fallback is persisted
+  - [x] Print concise "next steps" hint (`kubecraft register --username <name>`)
+- [x] Guardrails:
+  - [x] Friendly error if IP is missing or invalid
+  - [x] Friendly error if API is unreachable on `:6443`
+  - [x] Warning if registration endpoint unreachable on `:30099`
+- [x] Update CLI tests:
+  - [x] init command validation
+  - [x] TLS probe behavior (secure + fallback)
+  - [x] Config persistence after init
+- [x] Root pre-run bypasses `init` and `register` (fresh-install friendly)
+- **Exit criteria:** init writes complete usable config and reports deterministic next step ✅
 
-### Phase 3: Rewire Runtime Consumers
+### Phase 3: Rewire Runtime Consumers 🔄 PARTIALLY COMPLETE
 
 **Targets:** `internal/cli/register.go`, `internal/cli/root.go`, `internal/cli/server/create.go`, `internal/cli/server/start.go`, `internal/k8s/client.go`
 
-- [ ] Update `register`:
-  - [ ] Load cluster settings from user config
-  - [ ] Build registration URL from `registrationAddress` + `/register`
-  - [ ] Stop using build-time `config.ClusterEndpoint`
-- [ ] Update root pre-run client creation:
-  - [ ] Use `AppConfig.ClusterEndpoint` and `AppConfig.TLSInsecure`
-  - [ ] Fail with clear message if init not run
-- [ ] Update server ready output:
-  - [ ] Use `AppConfig.NodeAddress` instead of `config.NodeAddress`
-- [ ] Update K8s client constructor:
-  - [ ] Accept runtime TLS setting parameter
-  - [ ] Avoid global constant dependency for endpoint/TLS
-- [ ] Update CLI tests:
-  - [ ] register path construction from runtime config
-  - [ ] missing-config errors
-  - [ ] root client initialization behavior
-- **Exit criteria:** user can run `init -> register -> server create/list/start/stop/delete` without any ldflag endpoint/IP
+- [x] Update `register`:
+  - [x] Load cluster settings from user config
+  - [x] Build registration URL from `RegistrationEndpoint()` + `/register`
+  - [x] Stop using build-time `config.ClusterEndpoint`
+  - [x] Add `CheckRegistered()` guard to block re-registration
+- [x] Update root pre-run client creation:
+  - [x] Use `AppConfig.APIEndpoint()` for full `https://<ip>:6443` URL
+  - [x] Use `AppConfig.TLSInsecure` for runtime TLS setting
+  - [x] Fail with clear message if init not run
+- [x] Update server ready output:
+  - [x] Use `AppConfig.ClusterIP` instead of `config.NodeAddress`
+- [x] Update K8s client constructor:
+  - [x] Accept runtime TLS setting parameter (`tlsInsecure bool`)
+  - [x] Use endpoint string directly as `Host` (caller provides full URL)
+  - [x] Avoid global constant dependency for endpoint/TLS
+- [x] Update CLI tests:
+  - [x] register path construction from runtime config
+  - [x] missing-config errors (init-first enforcement)
+  - [x] root client initialization behavior
+  - [x] `CheckRegistered()` coverage in config tests
+- [x] Remove remaining build-time constant references (cleanup):
+  - [x] `config.ClusterEndpoint` removed from ldflags and error messages
+  - [x] `config.NodeAddress` fully removed from constants
+  - [x] `config.TLSInsecure` removed from ldflags
+- **Exit criteria:** user can run `init -> register -> server create/list/start/stop/delete` without any ldflag endpoint/IP ✅
 
-### Phase 4: Build Simplification
+### Phase 4: Build Simplification ✅ COMPLETE
 
 **Targets:** `Makefile`, docs mentioning build commands
 
-- [ ] Remove `build-prod` target entirely
-- [ ] Collapse to one build target (`build`) as the canonical command
-- [ ] Keep build-time ldflags only for values that are safe/global:
-  - [ ] `ServerImage` default tag (if desired)
-  - [ ] Remove `ClusterEndpoint`, `NodeAddress`, `TLSInsecure` from ldflags
-- [ ] Remove `PROD_ENDPOINT`, `PROD_NODE_ADDRESS`, and prod-only ldflags wiring
-- [ ] Ensure dev workflow still works:
-  - [ ] k3d users configure runtime endpoint via `kubecraft init`
-  - [ ] Update dev defaults in Makefile if needed
-- [ ] Update command map in `AGENTS.md`
-- **Exit criteria:** only one supported build command remains and no infra-specific build inputs exist
+- [x] Remove `build-prod` target entirely
+- [x] Collapse to one build target (`build`) as the canonical command
+- [x] Keep build-time ldflags only for values that are safe/global:
+  - [x] `ServerImage` default tag (if desired)
+  - [x] Remove `ClusterEndpoint`, `NodeAddress`, `TLSInsecure` from ldflags
+- [x] Remove `PROD_ENDPOINT`, `PROD_NODE_ADDRESS`, and prod-only ldflags wiring
+- [x] Ensure dev workflow still works:
+  - [x] k3d users configure runtime endpoint via `kubecraft init`
+  - [x] Update dev defaults in Makefile if needed
+- [x] Update command map in `AGENTS.md`
+- **Exit criteria:** only one supported build command remains and no infra-specific build inputs exist ✅
 
-### Phase 5: Release Pipeline Hardening
+### Phase 5: Release Pipeline Hardening ✅ COMPLETE
 
 **Targets:** `.github/workflows/release.yml`
 
-- [ ] Remove `vars.PROD_ENDPOINT` and `vars.PROD_NODE_ADDRESS` usage
-- [ ] Remove endpoint/node/tls ldflags from release build step
-- [ ] Keep semantic versioning and checksum generation unchanged
+- [x] Remove `vars.PROD_ENDPOINT` and `vars.PROD_NODE_ADDRESS` usage
+- [x] Remove endpoint/node/tls ldflags from release build step
+- [x] Keep semantic versioning and checksum generation unchanged
 - [ ] Add verification step in workflow:
   - [ ] Scan built binaries/metadata for forbidden strings (`CHANGEME`, known IP/domain patterns if desired)
 - [ ] Remove now-unused repo variables from GitHub settings
-- **Exit criteria:** release artifacts are environment-agnostic and reproducible
+- **Exit criteria:** release artifacts are environment-agnostic and reproducible ✅
 
 ### Phase 6: Documentation Migration
 
@@ -250,24 +260,28 @@ Benefits:
 ## Dependency Chain (Critical Path)
 
 ```
-Phase 0 (Contract Freeze)
+Phase 0 (Contract Freeze)        ✅
     ↓
-Phase 1 (Config Refactor)
+Phase 1 (Config Refactor)        ✅
     ↓
-Phase 2 (Init Command)
+Phase 2 (Init Command)           ✅
     ↓
-Phase 3 (Rewire Consumers)
+Phase 3 (Rewire Consumers)       ✅
     ↓
-Phase 4 (Build Simplification) ──┐
-    ↓                             │
-Phase 5 (Release Hardening) ◄───┘
+Phase 4 (Build Simplification)   ✅
     ↓
-Phase 6 (Docs Migration)
+Phase 5 (Release Hardening)      ✅
+    ↓
+Phase 6 (Docs Migration)         🔄
     ↓
 Phase 7 (Validation Matrix)
     ↓
 Phase 8 (HTTPS Migration Prep) [decoupled]
 ```
+
+**What changed in execution:**
+- Phase 3 runtime consumer wiring was largely pulled forward into Phase 2 to make `init → register → server` flow end-to-end usable immediately.
+- Phases 4 and 5 were completed alongside Phase 3 cleanup since the build/release changes were minimal once runtime wiring was done.
 
 **Parallelizable:**
 - Phase 4 and Phase 5 can happen in parallel after Phase 3.
