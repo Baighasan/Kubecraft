@@ -7,6 +7,7 @@ import (
 
 	"github.com/baighasan/kubecraft/internal/cli"
 	"github.com/baighasan/kubecraft/internal/config"
+	"github.com/baighasan/kubecraft/internal/k8s"
 	"github.com/spf13/cobra"
 )
 
@@ -60,7 +61,7 @@ func executeCreate(serverName string) error {
 
 	// Create Minecraft server
 	fmt.Fprintf(os.Stderr, "Creating server %s...\n", serverName)
-	err = cli.K8sClient.CreateServer(serverName, cli.AppConfig.Username, port, serverImage)
+	err = cli.K8sClient.CreateServer(serverName, cli.AppConfig.Username, port, serverImage, k8s.DefaultServerSpec())
 	if err != nil {
 		return fmt.Errorf("cannot create server: %w", err)
 	}

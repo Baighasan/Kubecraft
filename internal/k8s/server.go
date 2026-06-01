@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/baighasan/kubecraft/internal/config"
@@ -20,6 +21,20 @@ type ServerInfo struct {
 	Status   string // "running" or "stopped"
 	NodePort int32
 	Age      time.Time
+}
+
+type ServerSpec struct {
+	Version    string
+	GameMode   string
+	MaxPlayers int
+}
+
+func DefaultServerSpec() ServerSpec {
+	return ServerSpec{
+		Version:    config.DefaultMinecraftVersion,
+		GameMode:   config.DefaultGameMode,
+		MaxPlayers: config.DefaultMaxPlayers,
+	}
 }
 
 func (c *Client) CheckNodeCapacity() error {
@@ -84,7 +99,7 @@ func (c *Client) AllocateNodePort() (int32, error) {
 	return 0, fmt.Errorf("no available ports found in range %d-%d", config.McNodePortRangeMin, config.McNodePortRangeMax)
 }
 
-func (c *Client) CreateServer(serverName string, username string, nodePort int32, serverImage string) error {
+func (c *Client) CreateServer(serverName string, username string, nodePort int32, serverImage string, spec ServerSpec) error {
 	if serverImage == "" {
 		serverImage = config.ServerImage
 	}
@@ -170,15 +185,15 @@ func (c *Client) CreateServer(serverName string, username string, nodePort int32
 								},
 								{
 									Name:  "VERSION",
-									Value: "1.21.11",
+									Value: spec.Version,
 								},
 								{
 									Name:  "GAME_MODE",
-									Value: "survival",
+									Value: spec.GameMode,
 								},
 								{
 									Name:  "MAX_PLAYERS",
-									Value: "5",
+									Value: strconv.Itoa(spec.MaxPlayers),
 								},
 								{
 									Name:  "JAVA_MEMORY",

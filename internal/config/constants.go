@@ -76,8 +76,11 @@ const (
 
 // Server Configuration - Optimized for Oracle Cloud (16GB RAM, 3 OCPU)
 const (
-	MinServerNameLength = 3
-	MaxServerNameLength = 16
+	MinServerNameLength     = 3
+	MaxServerNameLength     = 16
+	DefaultMinecraftVersion = "1.21.11"
+	DefaultGameMode         = "survival"
+	DefaultMaxPlayers       = 5
 
 	MinecraftPort      = 25565
 	ServerStorageSize  = "10Gi"
