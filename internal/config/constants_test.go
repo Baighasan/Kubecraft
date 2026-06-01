@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -179,5 +180,43 @@ func TestConstants_ClusterCapacity(t *testing.T) {
 	maxServers := TotalAvailableRAM / CapacityThreshold
 	if maxServers < 3 {
 		t.Errorf("Cluster can only fit %d servers at limit, need at least 3", maxServers)
+	}
+}
+
+func TestConstants_MaxPlayersBounds(t *testing.T) {
+	if MinMaxPlayers != 1 {
+		t.Errorf("MinMaxPlayers = %d, want 1", MinMaxPlayers)
+	}
+
+	if MaxMaxPlayers != 50 {
+		t.Errorf("MaxMaxPlayers = %d, want 50", MaxMaxPlayers)
+	}
+
+	if DefaultMaxPlayers < MinMaxPlayers || DefaultMaxPlayers > MaxMaxPlayers {
+		t.Errorf("DefaultMaxPlayers = %d, want within [%d, %d]", DefaultMaxPlayers, MinMaxPlayers, MaxMaxPlayers)
+	}
+}
+
+func TestConstants_AllowedGameModes(t *testing.T) {
+	expected := []string{"survival", "creative", "adventure", "spectator"}
+
+	if !slices.Equal(AllowedGameModes, expected) {
+		t.Errorf("AllowedGameModes = %v, want %v", AllowedGameModes, expected)
+	}
+
+	if !slices.Contains(AllowedGameModes, DefaultGameMode) {
+		t.Errorf("DefaultGameMode %q is not in AllowedGameModes %v", DefaultGameMode, AllowedGameModes)
+	}
+}
+
+func TestConstants_AllowedMinecraftVersions(t *testing.T) {
+	expected := []string{"1.21.11", "1.21.10", "1.21.8", "1.21.4"}
+
+	if !slices.Equal(AllowedMinecraftVersions, expected) {
+		t.Errorf("AllowedMinecraftVersions = %v, want %v", AllowedMinecraftVersions, expected)
+	}
+
+	if !slices.Contains(AllowedMinecraftVersions, DefaultMinecraftVersion) {
+		t.Errorf("DefaultMinecraftVersion %q is not in AllowedMinecraftVersions %v", DefaultMinecraftVersion, AllowedMinecraftVersions)
 	}
 }

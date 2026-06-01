@@ -14,8 +14,9 @@ The wizard must auto-start when users run `kubecraft server create` with no posi
 ## Current Status
 
 - Phase 1 is implemented in code.
-- Defaults (`DefaultMinecraftVersion`, `DefaultGameMode`, `DefaultMaxPlayers`) were intentionally moved into Phase 1 and are complete.
-- Remaining phases are pending.
+- Phase 2 is implemented in code, including the intentional runtime wiring deviation for `server.properties` (`gamemode`, `max-players`).
+- Local validation for Phase 2 is complete.
+- Remaining phases are pending (starting at Phase 3).
 
 ## Locked Product Decisions
 
@@ -101,15 +102,25 @@ The wizard must auto-start when users run `kubecraft server create` with no posi
 ### Goals
 
 - Centralize wizard and non-wizard defaults in config constants.
+- Ensure selected runtime values are actually applied by the Minecraft process.
 
 ### Tasks
 
 1. Add constants to `internal/config/constants.go`:
-   - `MinMaxPlayers`, `MaxMaxPlayers`
+    - `MinMaxPlayers`, `MaxMaxPlayers`
 2. Add allowed values:
-   - `AllowedGameModes = []string{"survival", "creative", "adventure", "spectator"}`
-   - `AllowedMinecraftVersions = []string{...}` (curated static list)
+    - `AllowedGameModes = []string{"survival", "creative", "adventure", "spectator"}`
+    - `AllowedMinecraftVersions = []string{...}` (curated static list)
 3. Ensure defaults are members of allowed lists.
+4. Runtime wiring deviation (intentional): update `docker/minecraft/start.sh` to generate a minimal `server.properties` that includes:
+   - `gamemode=${GAME_MODE}`
+   - `max-players=${MAX_PLAYERS}`
+   - keep this minimal and avoid uncommenting properties backed by currently undefined env vars.
+
+### Intentional Deviation Note
+
+- Phase 2 originally focused on config-only constants.
+- Adding minimal `server.properties` generation in this phase closes the gap between pod env vars and actual Minecraft runtime behavior for game mode and max players.
 
 ### Version List Strategy
 
@@ -119,6 +130,7 @@ The wizard must auto-start when users run `kubecraft server create` with no posi
 ### Exit Criteria
 
 - Single source of truth exists for defaults and menus.
+- Runtime config file generation applies `GAME_MODE` and `MAX_PLAYERS` values.
 
 ## Phase 3 - CLI Flow Refactor for Dual Mode
 
