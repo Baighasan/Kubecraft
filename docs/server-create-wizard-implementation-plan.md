@@ -15,8 +15,11 @@ The wizard must auto-start when users run `kubecraft server create` with no posi
 
 - Phase 1 is implemented in code.
 - Phase 2 is implemented in code, including the intentional runtime wiring deviation for `server.properties` (`gamemode`, `max-players`).
-- Local validation for Phase 2 is complete.
-- Remaining phases are pending (starting at Phase 3).
+- Phase 3 is implemented in code, including approved deviations:
+  - image resolution helper to remove mutable global runtime state
+  - zero-arg wizard dispatch placeholder wired (`runCreateWizard()`), full prompts deferred to Phase 4
+- Local validation for Phase 3 is complete (`go test ./internal/cli/server ./internal/config`).
+- Remaining phases are pending (starting at Phase 4).
 
 ## Locked Product Decisions
 
@@ -150,8 +153,14 @@ The wizard must auto-start when users run `kubecraft server create` with no posi
    - `GameMode`
    - `MaxPlayers`
 4. Add resolver helpers:
-   - `buildDefaultCreateInput(serverName string)`
-   - `executeCreateWithInput(input createInput)`
+    - `buildDefaultCreateInput(serverName string)`
+    - `executeCreateWithInput(input createInput)`
+
+### Intentional Deviations (Approved)
+
+- Add `resolveServerImage(flagValue string)` in CLI layer and stop mutating package-global `serverImage` during execution.
+- Rationale: avoids cross-invocation/test state bleed while preserving existing precedence (`--server-image` -> `KUBECRAFT_SERVER_IMAGE` -> build-time default).
+- Add a temporary `runCreateWizard()` placeholder in Phase 3 for zero-arg dispatch wiring; full prompt behavior remains Phase 4.
 
 ### Exit Criteria
 
