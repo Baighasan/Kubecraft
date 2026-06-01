@@ -83,7 +83,10 @@ kubecraft init --ip <cluster-ip-or-dns>
 # 2) Register once
 kubecraft register --username <name>
 
-# 3) Create a server
+# 3) Create a server (interactive wizard)
+kubecraft server create
+
+# Or direct mode with defaults
 kubecraft server create <server-name>
 ```
 
@@ -92,12 +95,21 @@ kubecraft server create <server-name>
 ```bash
 kubecraft init --ip <cluster-ip-or-dns>
 kubecraft register --username <name>
+kubecraft server create
 kubecraft server create <name>
 kubecraft server list
 kubecraft server start <name>
 kubecraft server stop <name>
 kubecraft server delete <name>
 ```
+
+`kubecraft server create` (with no positional args) launches an interactive wizard with four prompts:
+1. Minecraft version (selected from a built-in list)
+2. Server name
+3. Game mode (`survival`, `creative`, `adventure`, `spectator`)
+4. Max players (`1-50`)
+
+After the prompts, the CLI shows a summary and asks `Proceed? (y/N)`. Choosing not to proceed exits successfully and does not create cluster resources.
 
 ### Registration Flow
 

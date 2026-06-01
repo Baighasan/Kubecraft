@@ -26,8 +26,14 @@ The wizard must auto-start when users run `kubecraft server create` with no posi
   - summary + `Proceed? (y/N)` prompt before mutations.
   - cancellation exits successfully (`nil`) without creating resources.
 - Validation is implemented in CLI (`validateCreateInput`) for server name, version, game mode, and max players.
-- Local validation is complete (`go test ./internal/cli/server ./internal/config` and `make build`).
-- Remaining phases are pending (starting at Phase 6).
+- Local validation is complete (`go test ./internal/cli/server`, `make test`, and `make build`).
+- Phase 6 create-pipeline wiring is implemented in code (CLI input -> `k8s.ServerSpec` -> `CreateServer(...)`).
+- Phase 7 test coverage is implemented in code, including:
+  - wizard composition cancellation/confirmation behavior tests in CLI.
+  - max-player boundary validation coverage in CLI.
+  - custom `ServerSpec` env assertion test in k8s integration tests.
+- Phase 8 documentation alignment is implemented in `README.md` (wizard launch, built-in version list, cancellation semantics).
+- Remaining work is integration validation in a cluster-enabled environment (`go test -v -race -p 1 -tags=integration ./internal/...`).
 
 ## Locked Product Decisions
 

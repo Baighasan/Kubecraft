@@ -43,25 +43,27 @@ var createCmd = &cobra.Command{
 }
 
 func runCreateWizard() error {
-	input, err := promptCreateInput(os.Stdin, os.Stderr)
+	return runCreateFromPrompts(os.Stdin, os.Stderr, executeCreateWithInput)
+}
+
+func runCreateFromPrompts(reader io.Reader, writer io.Writer, execute func(createInput) error) error {
+	scanner := bufio.NewScanner(reader)
+
+	input, err := promptCreateInputWithScanner(scanner, writer)
 	if err != nil {
 		return err
 	}
 
-	if err := validateCreateInput(input); err != nil {
-		return fmt.Errorf("invalid wizard input: %w", err)
-	}
-
-	confirmed, err := promptConfirmation(os.Stdin, os.Stderr, input)
+	confirmed, err := promptConfirmationWithScanner(scanner, writer, input)
 	if err != nil {
 		return err
 	}
 	if !confirmed {
-		fmt.Fprintln(os.Stderr, "Server creation cancelled")
+		fmt.Fprintln(writer, "Server creation cancelled")
 		return nil
 	}
 
-	return executeCreateWithInput(input)
+	return execute(input)
 }
 
 func buildDefaultCreateInput(serverName string) createInput {
@@ -157,7 +159,10 @@ func validateCreateInput(input createInput) error {
 
 func promptCreateInput(reader io.Reader, writer io.Writer) (createInput, error) {
 	scanner := bufio.NewScanner(reader)
+	return promptCreateInputWithScanner(scanner, writer)
+}
 
+func promptCreateInputWithScanner(scanner *bufio.Scanner, writer io.Writer) (createInput, error) {
 	version, err := promptMenu(scanner, writer, "Select Minecraft version", config.AllowedMinecraftVersions)
 	if err != nil {
 		return createInput{}, err
@@ -254,6 +259,10 @@ func promptMaxPlayers(scanner *bufio.Scanner, writer io.Writer) (int, error) {
 
 func promptConfirmation(reader io.Reader, writer io.Writer, input createInput) (bool, error) {
 	scanner := bufio.NewScanner(reader)
+	return promptConfirmationWithScanner(scanner, writer, input)
+}
+
+func promptConfirmationWithScanner(scanner *bufio.Scanner, writer io.Writer, input createInput) (bool, error) {
 	fmt.Fprintln(writer, "\nServer configuration:")
 	fmt.Fprintf(writer, "  Version: %s\n", input.Version)
 	fmt.Fprintf(writer, "  Server Name: %s\n", input.ServerName)

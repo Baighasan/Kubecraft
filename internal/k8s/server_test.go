@@ -163,6 +163,55 @@ func TestCreateServer_Success(t *testing.T) {
 	}
 }
 
+func TestCreateServer_CustomSpecEnvValues(t *testing.T) {
+	client := GetTestClient(t)
+	username := UniqueUsername()
+	CreateTestNamespace(t, client, username)
+	defer CleanupNamespace(t, client, username)
+
+	client.namespace = config.NamespacePrefix + username
+
+	port, err := client.AllocateNodePort()
+	if err != nil {
+		t.Fatalf("AllocateNodePort() error = %v", err)
+	}
+
+	spec := ServerSpec{
+		Version:    config.AllowedMinecraftVersions[1],
+		GameMode:   config.AllowedGameModes[1],
+		MaxPlayers: 12,
+	}
+
+	err = client.CreateServer("testserver", username, port, "", spec)
+	if err != nil {
+		t.Fatalf("CreateServer() error = %v", err)
+	}
+
+	sts, err := client.clientset.AppsV1().StatefulSets(client.namespace).Get(
+		context.TODO(),
+		"testserver",
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		t.Fatalf("Failed to get StatefulSet: %v", err)
+	}
+
+	envMap := make(map[string]string)
+	for _, env := range sts.Spec.Template.Spec.Containers[0].Env {
+		envMap[env.Name] = env.Value
+	}
+
+	if envMap["VERSION"] != spec.Version {
+		t.Errorf("VERSION = %q, want %q", envMap["VERSION"], spec.Version)
+	}
+	if envMap["GAME_MODE"] != spec.GameMode {
+		t.Errorf("GAME_MODE = %q, want %q", envMap["GAME_MODE"], spec.GameMode)
+	}
+	if envMap["MAX_PLAYERS"] != strconv.Itoa(spec.MaxPlayers) {
+		t.Errorf("MAX_PLAYERS = %q, want %q", envMap["MAX_PLAYERS"], strconv.Itoa(spec.MaxPlayers))
+	}
+}
+
 func TestCreateServer_DuplicateNameFails(t *testing.T) {
 	client := GetTestClient(t)
 	username := UniqueUsername()

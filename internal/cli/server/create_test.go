@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"bufio"
 	"os"
 	"strings"
 	"testing"
@@ -54,6 +55,35 @@ func TestValidateCreateInput_InvalidMaxPlayers(t *testing.T) {
 	input := createInput{ServerName: "myserver", Version: config.DefaultMinecraftVersion, GameMode: config.DefaultGameMode, MaxPlayers: 100}
 	if err := validateCreateInput(input); err == nil {
 		t.Fatal("validateCreateInput() expected error for invalid max players, got nil")
+	}
+}
+
+func TestValidateCreateInput_InvalidServerName(t *testing.T) {
+	input := createInput{ServerName: "BadName", Version: config.DefaultMinecraftVersion, GameMode: config.DefaultGameMode, MaxPlayers: config.DefaultMaxPlayers}
+	if err := validateCreateInput(input); err == nil {
+		t.Fatal("validateCreateInput() expected error for invalid server name, got nil")
+	}
+}
+
+func TestValidateCreateInput_MaxPlayersBoundaries(t *testing.T) {
+	lower := createInput{ServerName: "myserver", Version: config.DefaultMinecraftVersion, GameMode: config.DefaultGameMode, MaxPlayers: config.MinMaxPlayers}
+	if err := validateCreateInput(lower); err != nil {
+		t.Fatalf("validateCreateInput(lower boundary) error = %v, want nil", err)
+	}
+
+	upper := createInput{ServerName: "myserver", Version: config.DefaultMinecraftVersion, GameMode: config.DefaultGameMode, MaxPlayers: config.MaxMaxPlayers}
+	if err := validateCreateInput(upper); err != nil {
+		t.Fatalf("validateCreateInput(upper boundary) error = %v, want nil", err)
+	}
+
+	below := createInput{ServerName: "myserver", Version: config.DefaultMinecraftVersion, GameMode: config.DefaultGameMode, MaxPlayers: config.MinMaxPlayers - 1}
+	if err := validateCreateInput(below); err == nil {
+		t.Fatal("validateCreateInput() expected error below min max players, got nil")
+	}
+
+	above := createInput{ServerName: "myserver", Version: config.DefaultMinecraftVersion, GameMode: config.DefaultGameMode, MaxPlayers: config.MaxMaxPlayers + 1}
+	if err := validateCreateInput(above); err == nil {
+		t.Fatal("validateCreateInput() expected error above max max players, got nil")
 	}
 }
 
@@ -114,6 +144,61 @@ func TestPromptConfirmation(t *testing.T) {
 	}
 	if confirmed {
 		t.Fatal("promptConfirmation(n) = true, want false")
+	}
+}
+
+func TestRunCreateFromPrompts_CancelledDoesNotExecute(t *testing.T) {
+	reader := strings.NewReader("1\nmyserver\n1\n5\nn\n")
+	var output bytes.Buffer
+	executed := false
+
+	err := runCreateFromPrompts(reader, &output, func(input createInput) error {
+		executed = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("runCreateFromPrompts() error = %v", err)
+	}
+
+	if executed {
+		t.Fatal("runCreateFromPrompts() executed create pipeline on cancellation")
+	}
+
+	if !strings.Contains(output.String(), "Server creation cancelled") {
+		t.Fatalf("output missing cancellation message, got: %q", output.String())
+	}
+}
+
+func TestRunCreateFromPrompts_ConfirmedExecutesWithInput(t *testing.T) {
+	reader := strings.NewReader("2\nmyserver\n3\n12\ny\n")
+	var output bytes.Buffer
+	called := 0
+	var captured createInput
+
+	err := runCreateFromPrompts(reader, &output, func(input createInput) error {
+		called++
+		captured = input
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("runCreateFromPrompts() error = %v", err)
+	}
+
+	if called != 1 {
+		t.Fatalf("execute called = %d, want 1", called)
+	}
+
+	if captured.ServerName != "myserver" {
+		t.Errorf("captured.ServerName = %q, want %q", captured.ServerName, "myserver")
+	}
+	if captured.Version != config.AllowedMinecraftVersions[1] {
+		t.Errorf("captured.Version = %q, want %q", captured.Version, config.AllowedMinecraftVersions[1])
+	}
+	if captured.GameMode != config.AllowedGameModes[2] {
+		t.Errorf("captured.GameMode = %q, want %q", captured.GameMode, config.AllowedGameModes[2])
+	}
+	if captured.MaxPlayers != 12 {
+		t.Errorf("captured.MaxPlayers = %d, want %d", captured.MaxPlayers, 12)
 	}
 }
 
@@ -235,5 +320,18 @@ func TestValidateServerName_MustStartWithLetter(t *testing.T) {
 				t.Errorf("ValidateServerName(%q) expected error, got nil", name)
 			}
 		})
+	}
+}
+
+func TestScanTrimmedLine_EOF(t *testing.T) {
+	scanner := bufio.NewScanner(strings.NewReader(""))
+
+	_, err := scanTrimmedLine(scanner)
+	if err == nil {
+		t.Fatal("scanTrimmedLine() expected error on EOF, got nil")
+	}
+
+	if err.Error() != "no input received" {
+		t.Fatalf("scanTrimmedLine() error = %q, want %q", err.Error(), "no input received")
 	}
 }
