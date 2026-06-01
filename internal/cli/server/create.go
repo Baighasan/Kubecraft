@@ -1,8 +1,13 @@
 package server
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
+	"slices"
+	"strconv"
+	"strings"
 	"unicode"
 
 	"github.com/baighasan/kubecraft/internal/cli"
@@ -38,7 +43,25 @@ var createCmd = &cobra.Command{
 }
 
 func runCreateWizard() error {
-	return fmt.Errorf("wizard mode is not implemented yet")
+	input, err := promptCreateInput(os.Stdin, os.Stderr)
+	if err != nil {
+		return err
+	}
+
+	if err := validateCreateInput(input); err != nil {
+		return fmt.Errorf("invalid wizard input: %w", err)
+	}
+
+	confirmed, err := promptConfirmation(os.Stdin, os.Stderr, input)
+	if err != nil {
+		return err
+	}
+	if !confirmed {
+		fmt.Fprintln(os.Stderr, "Server creation cancelled")
+		return nil
+	}
+
+	return executeCreateWithInput(input)
 }
 
 func buildDefaultCreateInput(serverName string) createInput {
@@ -66,9 +89,8 @@ func resolveServerImage(flagValue string) string {
 func executeCreateWithInput(input createInput) error {
 	selectedImage := resolveServerImage(serverImage)
 
-	// Validate server name
-	if err := ValidateServerName(input.ServerName); err != nil {
-		return fmt.Errorf("invalid server name: %w", err)
+	if err := validateCreateInput(input); err != nil {
+		return fmt.Errorf("invalid create input: %w", err)
 	}
 
 	// Check if server already exists
@@ -111,6 +133,151 @@ func executeCreateWithInput(input createInput) error {
 	fmt.Fprintf(os.Stderr, "Server %s is ready at %s:%d\n", input.ServerName, cli.AppConfig.ClusterIP, port)
 
 	return nil
+}
+
+func validateCreateInput(input createInput) error {
+	if err := ValidateServerName(input.ServerName); err != nil {
+		return fmt.Errorf("invalid server name: %w", err)
+	}
+
+	if !slices.Contains(config.AllowedMinecraftVersions, input.Version) {
+		return fmt.Errorf("version must be one of %v", config.AllowedMinecraftVersions)
+	}
+
+	if !slices.Contains(config.AllowedGameModes, input.GameMode) {
+		return fmt.Errorf("game mode must be one of %v", config.AllowedGameModes)
+	}
+
+	if input.MaxPlayers < config.MinMaxPlayers || input.MaxPlayers > config.MaxMaxPlayers {
+		return fmt.Errorf("max players must be between %d and %d", config.MinMaxPlayers, config.MaxMaxPlayers)
+	}
+
+	return nil
+}
+
+func promptCreateInput(reader io.Reader, writer io.Writer) (createInput, error) {
+	scanner := bufio.NewScanner(reader)
+
+	version, err := promptMenu(scanner, writer, "Select Minecraft version", config.AllowedMinecraftVersions)
+	if err != nil {
+		return createInput{}, err
+	}
+
+	serverName, err := promptServerName(scanner, writer)
+	if err != nil {
+		return createInput{}, err
+	}
+
+	gameMode, err := promptMenu(scanner, writer, "Select game mode", config.AllowedGameModes)
+	if err != nil {
+		return createInput{}, err
+	}
+
+	maxPlayers, err := promptMaxPlayers(scanner, writer)
+	if err != nil {
+		return createInput{}, err
+	}
+
+	return createInput{
+		ServerName: serverName,
+		Version:    version,
+		GameMode:   gameMode,
+		MaxPlayers: maxPlayers,
+	}, nil
+}
+
+func promptMenu(scanner *bufio.Scanner, writer io.Writer, label string, options []string) (string, error) {
+	for {
+		fmt.Fprintf(writer, "%s:\n", label)
+		for i, option := range options {
+			fmt.Fprintf(writer, "  %d) %s\n", i+1, option)
+		}
+		fmt.Fprint(writer, "Enter choice number: ")
+
+		input, err := scanTrimmedLine(scanner)
+		if err != nil {
+			return "", err
+		}
+
+		index, err := strconv.Atoi(input)
+		if input == "" || err != nil || index < 1 || index > len(options) {
+			fmt.Fprintln(writer, "Invalid selection, please choose a valid menu number")
+			continue
+		}
+
+		return options[index-1], nil
+	}
+}
+
+func promptServerName(scanner *bufio.Scanner, writer io.Writer) (string, error) {
+	for {
+		fmt.Fprint(writer, "Enter server name: ")
+		name, err := scanTrimmedLine(scanner)
+		if err != nil {
+			return "", err
+		}
+		if name == "" {
+			fmt.Fprintln(writer, "Invalid server name: input cannot be empty")
+			continue
+		}
+
+		if err := ValidateServerName(name); err != nil {
+			fmt.Fprintf(writer, "Invalid server name: %v\n", err)
+			continue
+		}
+
+		return name, nil
+	}
+}
+
+func promptMaxPlayers(scanner *bufio.Scanner, writer io.Writer) (int, error) {
+	for {
+		fmt.Fprintf(writer, "Select max players (%d-%d): ", config.MinMaxPlayers, config.MaxMaxPlayers)
+		input, err := scanTrimmedLine(scanner)
+		if err != nil {
+			return 0, err
+		}
+		if input == "" {
+			fmt.Fprintf(writer, "Invalid max players, enter a number between %d and %d\n", config.MinMaxPlayers, config.MaxMaxPlayers)
+			continue
+		}
+
+		value, err := strconv.Atoi(input)
+		if err != nil || value < config.MinMaxPlayers || value > config.MaxMaxPlayers {
+			fmt.Fprintf(writer, "Invalid max players, enter a number between %d and %d\n", config.MinMaxPlayers, config.MaxMaxPlayers)
+			continue
+		}
+
+		return value, nil
+	}
+}
+
+func promptConfirmation(reader io.Reader, writer io.Writer, input createInput) (bool, error) {
+	scanner := bufio.NewScanner(reader)
+	fmt.Fprintln(writer, "\nServer configuration:")
+	fmt.Fprintf(writer, "  Version: %s\n", input.Version)
+	fmt.Fprintf(writer, "  Server Name: %s\n", input.ServerName)
+	fmt.Fprintf(writer, "  Game Mode: %s\n", input.GameMode)
+	fmt.Fprintf(writer, "  Max Players: %d\n", input.MaxPlayers)
+	fmt.Fprint(writer, "Proceed? (y/N): ")
+
+	answer, err := scanTrimmedLine(scanner)
+	if err != nil {
+		return false, err
+	}
+
+	return strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes"), nil
+}
+
+func scanTrimmedLine(scanner *bufio.Scanner) (string, error) {
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", fmt.Errorf("failed to read input: %w", err)
+		}
+		return "", fmt.Errorf("no input received")
+	}
+
+	return strings.TrimSpace(scanner.Text()), nil
 }
 
 func ValidateServerName(name string) error {

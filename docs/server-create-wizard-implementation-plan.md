@@ -16,10 +16,18 @@ The wizard must auto-start when users run `kubecraft server create` with no posi
 - Phase 1 is implemented in code.
 - Phase 2 is implemented in code, including the intentional runtime wiring deviation for `server.properties` (`gamemode`, `max-players`).
 - Phase 3 is implemented in code, including approved deviations:
-  - image resolution helper to remove mutable global runtime state
-  - zero-arg wizard dispatch placeholder wired (`runCreateWizard()`), full prompts deferred to Phase 4
-- Local validation for Phase 3 is complete (`go test ./internal/cli/server ./internal/config`).
-- Remaining phases are pending (starting at Phase 4).
+  - image resolution helper to remove mutable global runtime state.
+  - zero-arg wizard dispatch wiring (`runCreateWizard()`).
+- Phase 4 is implemented in code with approved deviations:
+  - interactive 4-question wizard prompts.
+  - reader/writer-backed prompt helpers while runtime remains wired to `os.Stdin`/`os.Stderr`.
+  - strict bounded numeric max-players input (`1-50`) instead of rendering 50 menu rows.
+- Phase 5 confirmation behavior has been intentionally pulled into Phase 4 and implemented:
+  - summary + `Proceed? (y/N)` prompt before mutations.
+  - cancellation exits successfully (`nil`) without creating resources.
+- Validation is implemented in CLI (`validateCreateInput`) for server name, version, game mode, and max players.
+- Local validation is complete (`go test ./internal/cli/server ./internal/config` and `make build`).
+- Remaining phases are pending (starting at Phase 6).
 
 ## Locked Product Decisions
 
@@ -166,22 +174,33 @@ The wizard must auto-start when users run `kubecraft server create` with no posi
 
 - Command supports both entry modes without behavior ambiguity.
 
-## Phase 4 - Implement Wizard Prompts (4 Questions)
+## Phase 4 - Implement Wizard Prompts + Confirmation
 
 ### Goals
 
 - Deliver the interactive guided setup with strict selection behavior.
+- Ensure no cluster mutation occurs before explicit confirmation.
 
 ### Tasks
 
 1. Implement wizard function, e.g. `runCreateWizard()`.
 2. Prompt sequence:
-   - Q1 version: numeric/menu index select from `AllowedMinecraftVersions`
-   - Q2 server name: stdin text input
-   - Q3 game mode: menu select from `AllowedGameModes`
-   - Q4 max players: menu select from `1..50`
+    - Q1 version: numeric/menu index select from `AllowedMinecraftVersions`
+    - Q2 server name: stdin text input
+    - Q3 game mode: menu select from `AllowedGameModes`
+    - Q4 max players: menu select from `1..50`
 3. Normalize selected values into `createInput`.
 4. Keep prompts and status output on stderr for CLI consistency.
+5. Add confirmation block immediately after question flow (pulled forward from Phase 5):
+   - print summary of four selected fields
+   - prompt `Proceed? (y/N)`
+   - on non-confirmation, print cancellation message and return `nil` (success exit)
+
+### Approved Deviations
+
+- Use reader/writer-backed internal prompt helpers for testability while wiring runtime calls to `os.Stdin` and `os.Stderr`.
+- For max players, use strict bounded numeric selection (`1-50`) instead of rendering 50 menu rows.
+- Pull confirmation forward from Phase 5 into this phase to satisfy "no hidden side effects before confirmation".
 
 ### UX Notes
 
@@ -191,6 +210,7 @@ The wizard must auto-start when users run `kubecraft server create` with no posi
 ### Exit Criteria
 
 - Wizard can collect all four values reliably in terminal.
+- Wizard cancellation at confirmation exits successfully and does not mutate cluster resources.
 
 ## Phase 5 - Validation and Confirmation
 
@@ -205,12 +225,7 @@ The wizard must auto-start when users run `kubecraft server create` with no posi
    - Version must exist in `AllowedMinecraftVersions`
    - Game mode must exist in `AllowedGameModes`
    - Max players in `1..50`
-2. Add confirmation block before cluster mutations:
-   - Print summary of 4 selected fields
-   - Prompt `Proceed? (y/N)`
-3. Cancel behavior:
-   - If not confirmed, print cancellation message
-   - return `nil` (exit success)
+2. Keep confirmation behavior implemented in Phase 4 and validate it with tests.
 
 ### Exit Criteria
 

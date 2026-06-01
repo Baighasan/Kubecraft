@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/baighasan/kubecraft/internal/config"
@@ -18,6 +20,100 @@ func TestCreateCmdArgsPolicy(t *testing.T) {
 
 	if err := createCmd.Args(createCmd, []string{"a", "b"}); err == nil {
 		t.Fatal("createCmd.Args with two args expected error, got nil")
+	}
+}
+
+func TestValidateCreateInput_Valid(t *testing.T) {
+	input := createInput{
+		ServerName: "myserver",
+		Version:    config.DefaultMinecraftVersion,
+		GameMode:   config.DefaultGameMode,
+		MaxPlayers: config.DefaultMaxPlayers,
+	}
+
+	if err := validateCreateInput(input); err != nil {
+		t.Fatalf("validateCreateInput() error = %v, want nil", err)
+	}
+}
+
+func TestValidateCreateInput_InvalidVersion(t *testing.T) {
+	input := createInput{ServerName: "myserver", Version: "9.9.9", GameMode: config.DefaultGameMode, MaxPlayers: config.DefaultMaxPlayers}
+	if err := validateCreateInput(input); err == nil {
+		t.Fatal("validateCreateInput() expected error for invalid version, got nil")
+	}
+}
+
+func TestValidateCreateInput_InvalidGameMode(t *testing.T) {
+	input := createInput{ServerName: "myserver", Version: config.DefaultMinecraftVersion, GameMode: "hardcore", MaxPlayers: config.DefaultMaxPlayers}
+	if err := validateCreateInput(input); err == nil {
+		t.Fatal("validateCreateInput() expected error for invalid game mode, got nil")
+	}
+}
+
+func TestValidateCreateInput_InvalidMaxPlayers(t *testing.T) {
+	input := createInput{ServerName: "myserver", Version: config.DefaultMinecraftVersion, GameMode: config.DefaultGameMode, MaxPlayers: 100}
+	if err := validateCreateInput(input); err == nil {
+		t.Fatal("validateCreateInput() expected error for invalid max players, got nil")
+	}
+}
+
+func TestPromptCreateInput_Success(t *testing.T) {
+	reader := strings.NewReader("1\nmyserver\n2\n10\n")
+	var output bytes.Buffer
+
+	input, err := promptCreateInput(reader, &output)
+	if err != nil {
+		t.Fatalf("promptCreateInput() error = %v", err)
+	}
+
+	if input.Version != config.AllowedMinecraftVersions[0] {
+		t.Errorf("Version = %q, want %q", input.Version, config.AllowedMinecraftVersions[0])
+	}
+	if input.ServerName != "myserver" {
+		t.Errorf("ServerName = %q, want %q", input.ServerName, "myserver")
+	}
+	if input.GameMode != config.AllowedGameModes[1] {
+		t.Errorf("GameMode = %q, want %q", input.GameMode, config.AllowedGameModes[1])
+	}
+	if input.MaxPlayers != 10 {
+		t.Errorf("MaxPlayers = %d, want %d", input.MaxPlayers, 10)
+	}
+}
+
+func TestPromptCreateInput_RepromptsInvalidEntries(t *testing.T) {
+	reader := strings.NewReader("99\n1\nBadName\nmyserver\n0\n1\nabc\n5\n")
+	var output bytes.Buffer
+
+	input, err := promptCreateInput(reader, &output)
+	if err != nil {
+		t.Fatalf("promptCreateInput() error = %v", err)
+	}
+
+	if input.ServerName != "myserver" {
+		t.Errorf("ServerName = %q, want %q", input.ServerName, "myserver")
+	}
+	if input.MaxPlayers != 5 {
+		t.Errorf("MaxPlayers = %d, want %d", input.MaxPlayers, 5)
+	}
+}
+
+func TestPromptConfirmation(t *testing.T) {
+	input := createInput{ServerName: "myserver", Version: config.DefaultMinecraftVersion, GameMode: config.DefaultGameMode, MaxPlayers: config.DefaultMaxPlayers}
+
+	confirmed, err := promptConfirmation(strings.NewReader("y\n"), &bytes.Buffer{}, input)
+	if err != nil {
+		t.Fatalf("promptConfirmation(y) error = %v", err)
+	}
+	if !confirmed {
+		t.Fatal("promptConfirmation(y) = false, want true")
+	}
+
+	confirmed, err = promptConfirmation(strings.NewReader("n\n"), &bytes.Buffer{}, input)
+	if err != nil {
+		t.Fatalf("promptConfirmation(n) error = %v", err)
+	}
+	if confirmed {
+		t.Fatal("promptConfirmation(n) = true, want false")
 	}
 }
 
