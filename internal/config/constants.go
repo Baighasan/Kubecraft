@@ -76,8 +76,13 @@ const (
 
 // Server Configuration - Optimized for Oracle Cloud (16GB RAM, 3 OCPU)
 const (
-	MinServerNameLength = 3
-	MaxServerNameLength = 16
+	MinServerNameLength     = 3
+	MaxServerNameLength     = 16
+	DefaultMinecraftVersion = "1.21.11"
+	DefaultGameMode         = "survival"
+	DefaultMaxPlayers       = 5
+	MinMaxPlayers           = 1
+	MaxMaxPlayers           = 50
 
 	MinecraftPort      = 25565
 	ServerStorageSize  = "10Gi"
@@ -85,6 +90,20 @@ const (
 	CapacityThreshold  = 4096  // 4GB in MiB — minimum free RAM to allow creation (matches server limit)
 	TotalAvailableRAM  = 14336 // 14GB in MiB — total RAM for workloads (16GB - 2GB system overhead)
 )
+
+var AllowedGameModes = []string{
+	"survival",
+	"creative",
+	"adventure",
+	"spectator",
+}
+
+var AllowedMinecraftVersions = []string{
+	"1.21.11",
+	"1.21.10",
+	"1.21.8",
+	"1.21.4",
+}
 
 // Readiness Check
 const (

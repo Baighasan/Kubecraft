@@ -39,24 +39,14 @@ if [ ! -f eula.txt ]; then
 fi
 
 # Generate server.properties from environment variables
-# Generate server.properties from environment variables
-#cat > server.properties << EOF
-## Kubecraft Auto-Generated Configuration
-#server-port=25565
-#gamemode=${GAME_MODE}
-#difficulty=${DIFFICULTY}
-#max-players=${MAX_PLAYERS}
-#view-distance=${VIEW_DISTANCE}
-#pvp=${PVP}
-#enable-command-block=${ENABLE_COMMAND_BLOCK}
-#spawn-protection=${SPAWN_PROTECTION}
-#motd=${MOTD}
-#online-mode=true
-#white-list=false
-#spawn-monsters=true
-#spawn-animals=true
-#spawn-npcs=true
-#EOF
+cat > server.properties << EOF
+# Kubecraft Auto-Generated Configuration
+server-port=25565
+gamemode=${GAME_MODE}
+max-players=${MAX_PLAYERS}
+online-mode=true
+white-list=false
+EOF
 
 echo "Starting Minecraft server..."
 echo "Memory: ${JAVA_MEMORY}"

@@ -4,6 +4,7 @@ package k8s
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/baighasan/kubecraft/internal/config"
@@ -40,7 +41,7 @@ func TestServerExists_ReturnsTrue(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port, "")
+	err = client.CreateServer("testserver", username, port, "", DefaultServerSpec())
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -81,7 +82,7 @@ func TestAllocateNodePort_SkipsOccupiedPorts(t *testing.T) {
 		t.Fatalf("AllocateNodePort() first call error = %v", err)
 	}
 
-	err = client.CreateServer("server1", username, port1, "")
+	err = client.CreateServer("server1", username, port1, "", DefaultServerSpec())
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -110,7 +111,7 @@ func TestCreateServer_Success(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port, "")
+	err = client.CreateServer("testserver", username, port, "", DefaultServerSpec())
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -136,6 +137,79 @@ func TestCreateServer_Success(t *testing.T) {
 	if svc.Spec.Ports[0].NodePort != port {
 		t.Errorf("Service NodePort = %d, want %d", svc.Spec.Ports[0].NodePort, port)
 	}
+
+	sts, err := client.clientset.AppsV1().StatefulSets(client.namespace).Get(
+		context.TODO(),
+		"testserver",
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		t.Fatalf("Failed to get StatefulSet: %v", err)
+	}
+
+	envMap := make(map[string]string)
+	for _, env := range sts.Spec.Template.Spec.Containers[0].Env {
+		envMap[env.Name] = env.Value
+	}
+
+	if envMap["VERSION"] != config.DefaultMinecraftVersion {
+		t.Errorf("VERSION = %q, want %q", envMap["VERSION"], config.DefaultMinecraftVersion)
+	}
+	if envMap["GAME_MODE"] != config.DefaultGameMode {
+		t.Errorf("GAME_MODE = %q, want %q", envMap["GAME_MODE"], config.DefaultGameMode)
+	}
+	if envMap["MAX_PLAYERS"] != strconv.Itoa(config.DefaultMaxPlayers) {
+		t.Errorf("MAX_PLAYERS = %q, want %q", envMap["MAX_PLAYERS"], strconv.Itoa(config.DefaultMaxPlayers))
+	}
+}
+
+func TestCreateServer_CustomSpecEnvValues(t *testing.T) {
+	client := GetTestClient(t)
+	username := UniqueUsername()
+	CreateTestNamespace(t, client, username)
+	defer CleanupNamespace(t, client, username)
+
+	client.namespace = config.NamespacePrefix + username
+
+	port, err := client.AllocateNodePort()
+	if err != nil {
+		t.Fatalf("AllocateNodePort() error = %v", err)
+	}
+
+	spec := ServerSpec{
+		Version:    config.AllowedMinecraftVersions[1],
+		GameMode:   config.AllowedGameModes[1],
+		MaxPlayers: 12,
+	}
+
+	err = client.CreateServer("testserver", username, port, "", spec)
+	if err != nil {
+		t.Fatalf("CreateServer() error = %v", err)
+	}
+
+	sts, err := client.clientset.AppsV1().StatefulSets(client.namespace).Get(
+		context.TODO(),
+		"testserver",
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		t.Fatalf("Failed to get StatefulSet: %v", err)
+	}
+
+	envMap := make(map[string]string)
+	for _, env := range sts.Spec.Template.Spec.Containers[0].Env {
+		envMap[env.Name] = env.Value
+	}
+
+	if envMap["VERSION"] != spec.Version {
+		t.Errorf("VERSION = %q, want %q", envMap["VERSION"], spec.Version)
+	}
+	if envMap["GAME_MODE"] != spec.GameMode {
+		t.Errorf("GAME_MODE = %q, want %q", envMap["GAME_MODE"], spec.GameMode)
+	}
+	if envMap["MAX_PLAYERS"] != strconv.Itoa(spec.MaxPlayers) {
+		t.Errorf("MAX_PLAYERS = %q, want %q", envMap["MAX_PLAYERS"], strconv.Itoa(spec.MaxPlayers))
+	}
 }
 
 func TestCreateServer_DuplicateNameFails(t *testing.T) {
@@ -151,7 +225,7 @@ func TestCreateServer_DuplicateNameFails(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port, "")
+	err = client.CreateServer("testserver", username, port, "", DefaultServerSpec())
 	if err != nil {
 		t.Fatalf("First CreateServer() error = %v", err)
 	}
@@ -161,7 +235,7 @@ func TestCreateServer_DuplicateNameFails(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port2, "")
+	err = client.CreateServer("testserver", username, port2, "", DefaultServerSpec())
 	if err == nil {
 		t.Error("Second CreateServer() expected error for duplicate name, got nil")
 	}
@@ -180,7 +254,7 @@ func TestDeleteServer_Success(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port, "")
+	err = client.CreateServer("testserver", username, port, "", DefaultServerSpec())
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -244,7 +318,7 @@ func TestListServers_ReturnsCreatedServer(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port, "")
+	err = client.CreateServer("testserver", username, port, "", DefaultServerSpec())
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -281,7 +355,7 @@ func TestScaleServer_StopAndStart(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port, "")
+	err = client.CreateServer("testserver", username, port, "", DefaultServerSpec())
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
@@ -375,7 +449,7 @@ func TestListServers_ShowsStoppedServer(t *testing.T) {
 		t.Fatalf("AllocateNodePort() error = %v", err)
 	}
 
-	err = client.CreateServer("testserver", username, port, "")
+	err = client.CreateServer("testserver", username, port, "", DefaultServerSpec())
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
